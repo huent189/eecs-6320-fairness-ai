@@ -15,6 +15,7 @@ age_map = {'40-60': 2, '80+': 4, '60-80': 3, '0-20': 0, '20-40': 1}
 race_map = {'WHITE': 0, 'BLACK/AFRICAN AMERICAN': 1, 'ASIAN': 2, 'HISPANIC/LATINO': 3, 'AMERICAN INDIAN/ALASKA NATIVE': 4,
             'OTHER': 5}
 num_groups_per_attrb = [2, 5, 6]
+
 class MIMICEmbeddingDataset(Dataset):
     def __init__(self, data_path, split):
         # Load your dataset
@@ -53,15 +54,40 @@ class MIMICEmbeddingModule(LightningDataModule):
         return [DataLoader(self.val_set, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True),
             DataLoader(self.test_set, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)]
 
-class SBSMIMICEmbeddingModule(LightningDataModule):
-    def __init__(self, data_csv, batch_size, num_workers, protected_attrb):
-        super(SBSMIMICEmbeddingModule).__init__(data_csv, batch_size, num_workers)
-        if protected_attrb == 'gender':
-            self.protected_attrb = protected_attrb
-    
-    def train_dataloader(self):
-        weights = make_weights_for_balanced_classes(dataset_train.imgs, len(dataset_train.classes), args.batch_size)
-        sampler = sampler.WeightedRandomSampler(weights, len(weights))
-        train_loader = DataLoader(self.train_set, batch_size=self.batch_size, shuffle = False,                              
-                          sampler = sampler, num_workers=self.num_workers, pin_memory=True)
-        return train_loader  
+
+
+if torch.cuda.is_available():
+    device = "cuda"
+elif torch.backends.mps.is_available():
+    device = "mps"
+else:
+    device = "cpu"
+device = torch.device(device)
+def make_weights_for_balanced_classes(self, pd_path, data_loader):
+    data = pd.read_csv(pd_path)
+    protected_group_weights = {}
+    protected_group_name_2_map = {
+        'gender': gender_map,
+        'age_decile': age_map,
+        'race': race_map,
+    }
+    sum_weights = 0
+    protected_group_map = protected_group_name_2_map[self.protected_attrb]
+    for k in protected_group_map.keys():
+        num_group = data[data[self.protected_attrb] == k].shape[0]
+        weight_group = 1. / (num_group + 0.01)
+        protected_group_weights[k] = weight_group
+        sum_weights += weight_group
+
+    # This is not strictly necessary, but makes for a more easy to read weight ratio
+    for k in protected_group_map.keys():
+        protected_group_weights[k] /= sum_weights
+
+    weight = torch.zeros(data.shape[0]).to(device)
+
+    for i, (img, label) in enumerate(data_loader):
+        idx = torch.arange(0, img.shape[0]) + (i * self.batch_size)
+        idx = idx.to(dtype=torch.long, device=device)
+        weight[idx] = protected_group_weights[label]
+
+    return weight 
