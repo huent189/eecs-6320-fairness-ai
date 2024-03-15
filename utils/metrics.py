@@ -55,10 +55,13 @@ class GroupBasedAccuracy(nn.Module):
     def computer_per_group_acc(self):
         y_preds = torch.concat(self.y_preds, dim=0)
         y_trues = torch.concat(self.y_trues, dim=0)
-        print('GAP')
         group_attrbs = torch.concat(self.group_attrbs, dim=0)
+        group_accs = []
+        group_gaps = []
         for i in range(group_attrbs.shape[-1]):
             accuracies = compute_accuracy_per_group(y_preds, y_trues, group_attrbs[:, i], self.thres, self.num_groups[i])
             gap = max(accuracies) - min(accuracies)
-            print(f'group {i}: {gap}\n', accuracies)
+            group_accs.append(accuracies)
+            group_gaps.append(gap)
+        return group_accs, group_gaps
             

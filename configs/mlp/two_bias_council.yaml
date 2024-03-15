@@ -22,7 +22,7 @@ trainer:
   val_check_interval: null
   check_val_every_n_epoch: 1
   num_sanity_val_steps: null
-  log_every_n_steps: 460
+  log_every_n_steps: 3405
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
@@ -41,11 +41,11 @@ trainer:
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
 pipeline: full
-exp_name: mlp_vanila_batchnorm
-version: null
+exp_name: mlp_2biasCouncils
+version: train_2biasCouncils_bn_maxEnsemble
 checkpoint: null
 model:
-  class_path: trainers.MIMICTrainer
+  class_path: trainers.BiasCouncilTrainer
   init_args:
     model :
       class_path: models.MLP
@@ -53,13 +53,21 @@ model:
         hidden_layer_sizes: [192]
         dropout: 0.4
         norm: batch
+    bias_model:
+      class_path: models.MLP
+      init_args:
+        hidden_layer_sizes: [512, 256]
+        dropout: 0.0
+        norm: batch
+    num_bias_models: 2
     learning_rate: 0.0001253
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
 data:
-  class_path: datasets.MIMICEmbeddingModule
+  class_path: datasets.MultipleMiMicEmbeddingDataModule
   init_args:
     data_csv: /local/ssd/huent/mimic-cxr-emb/processed_mimic_df.csv
     batch_size: 32
     num_workers: 8
+    trainset_ratios: [1.0, 0.5]

@@ -15,12 +15,17 @@ age_map = {'40-60': 2, '80+': 4, '60-80': 3, '0-20': 0, '20-40': 1}
 race_map = {'WHITE': 0, 'BLACK/AFRICAN AMERICAN': 1, 'ASIAN': 2, 'HISPANIC/LATINO': 3, 'AMERICAN INDIAN/ALASKA NATIVE': 4,
             'OTHER': 5}
 num_groups_per_attrb = [2, 5, 6]
+gender_labels = ['M', 'F']
+age_labels = ['0-20', '20-40', '40-60', '60-80', '80+']
+race_labels = ['WHITE', 'BLACK/AFRICAN AMERICAN', 'ASIAN', 'HISPANIC/LATINO', 'AMERICAN INDIAN/ALASKA NATIVE', 'OTHER']
+group_labels = [gender_labels, age_labels, race_labels]
 class MIMICEmbeddingDataset(Dataset):
-    def __init__(self, data_path, split):
+    def __init__(self, data_path, split, subset_ratio=1.0):
         # Load your dataset
         self.data = pd.read_csv(data_path)
         self.data = self.data[self.data['split'] == split]
-
+        if subset_ratio != 1.0:
+            self.data = self.data.sample(frac=subset_ratio, random_state=1, replace=False)
     def __len__(self):
         return len(self.data)
 
@@ -52,6 +57,17 @@ class MIMICEmbeddingModule(LightningDataModule):
     def test_dataloader(self):
         return [DataLoader(self.val_set, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True),
             DataLoader(self.test_set, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)]
+
+class MultipleMiMicEmbeddingDataModule(MIMICEmbeddingModule):
+    def __init__(self, data_csv, batch_size, num_workers, trainset_ratios):
+        super().__init__(data_csv, batch_size, num_workers)
+        self.trainset_ratios = trainset_ratios
+    def setup(self, stage: str):
+        self.test_set = MIMICEmbeddingDataset(self.data_csv, split='test')
+        self.train_sets = [MIMICEmbeddingDataset(self.data_csv, split='train', subset_ratio=r) for r in self.trainset_ratios]
+        self.val_set = MIMICEmbeddingDataset(self.data_csv, split='validate')
+    def train_dataloader(self):
+        return [DataLoader(ts, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True) for ts in self.train_sets]
 
 class SBSMIMICEmbeddingModule(LightningDataModule):
     def __init__(self, data_csv, batch_size, num_workers, protected_attrb):

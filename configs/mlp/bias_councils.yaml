@@ -9,7 +9,7 @@ trainer:
   logger: null
   callbacks: null
   fast_dev_run: false
-  max_epochs: 50
+  max_epochs: 100
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -22,7 +22,7 @@ trainer:
   val_check_interval: null
   check_val_every_n_epoch: 1
   num_sanity_val_steps: null
-  log_every_n_steps: 460
+  log_every_n_steps: 3405
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
@@ -42,7 +42,7 @@ trainer:
   default_root_dir: ./workdirs/
 pipeline: full
 exp_name: mlp_biasCouncils
-version: train
+version: train_biascouncils_bn_same
 checkpoint: null
 model:
   class_path: trainers.BiasCouncilTrainer
@@ -52,6 +52,13 @@ model:
       init_args:
         hidden_layer_sizes: [192]
         dropout: 0.4
+        norm: batch
+    bias_model:
+      class_path: models.MLP
+      init_args:
+        hidden_layer_sizes: [192]
+        dropout: 0.4
+        norm: batch
     learning_rate: 0.0001253
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
