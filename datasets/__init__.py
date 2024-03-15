@@ -1,2 +1,3 @@
-from .mimic_dataset import MIMICEmbeddingModule
-__all__ = ['MIMICEmbeddingModule']
+from .mimic_dataset import MIMICEmbeddingModule, SBSMIMICEmbeddingModule
+__all__ = ['MIMICEmbeddingModule',
+           'SBSMIMICEmbeddingModule']

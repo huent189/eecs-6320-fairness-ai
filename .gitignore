@@ -20,3 +20,6 @@ env/
 env.bak/
 env/
 workdirs
+
+# Checkpoints folder:
+checkpoints

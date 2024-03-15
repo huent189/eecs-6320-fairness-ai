@@ -40,10 +40,10 @@ trainer:
   sync_batchnorm: false
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
-pipeline: test
+pipeline: train
 exp_name: mlp_vanila
-version: test
-checkpoint: '/home/huent/fairness-ai/code/ai-debias/workdirs/mlp_vanila/AI-debias/76zt1nj8/checkpoints/epoch=46-val_auc=0.86.ckpt'
+version: train
+# checkpoint: '/Users/bahman/Documents/courses/Fairness/project/code/eecs-6320-fairness-ai/checkpoints/1.ckpt'
 model:
   class_path: trainers.MIMICTrainer
   init_args:
@@ -57,8 +57,9 @@ model:
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
 data:
-  class_path: datasets.MIMICEmbeddingModule
+  class_path: datasets.SBSMIMICEmbeddingModule
   init_args:
-    data_csv: /local/ssd/huent/mimic-cxr-emb/processed_mimic_df.csv
+    data_csv: /Users/bahman/Documents/courses/Fairness/project/code/misc/MIMIC_CXR_EMB/processed_mimic_df.csv
     batch_size: 32
     num_workers: 8
+    protected_attrb: gender
