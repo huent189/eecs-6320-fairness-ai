@@ -12,10 +12,10 @@ python main.py --config configs/mlp/vanila.yaml
         - [x] Write a SBS sampler class or method that returns a SBS sampler
         - [ ] Test the sampler with fake data or st
         - [x] Integrate into torch-lightning! 
-    - [ ] Write code for varying threshold  
+    - [x] Write code for varying threshold  
         - [x] test the OptimalThreshold module
-        - [ ] Metrics:
-            - [ ] Add the proposed formula instead of f1 score
+        - [x] Metrics:
+            - [x] Add the proposed formula instead of f1 score
             - [x] Write a new Optimal Threshold selector (It should find the best threshold for each group)
         - [x] Dataset:
             - [x] Write a dataset for the method
