@@ -1,2 +1,2 @@
-from .mimic_trainer import MIMICTrainer, BiasCouncilTrainer
-__all__ = ['MIMICTrainer', 'BiasCouncilTrainer']
+from .mimic_trainer import MIMICTrainer, BiasCouncilTrainer, SBS_THR_Trainer
+__all__ = ['MIMICTrainer', 'BiasCouncilTrainer', 'SBS_THR_Trainer']

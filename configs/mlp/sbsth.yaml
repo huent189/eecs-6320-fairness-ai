@@ -40,24 +40,25 @@ trainer:
   sync_batchnorm: false
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
-pipeline: test
-exp_name: testing_pipeline
-version: test
-checkpoint: './workdirs/testing_pipeline/AI-debias/keyvb072/checkpoints/last.ckpt'
+pipeline: full
+exp_name: testing_pipeline_full_2
+version: test2
+# checkpoint: './workdirs/testing_pipeline/AI-debias/keyvb072/checkpoints/last.ckpt'
 model:
-  class_path: trainers.MIMICTrainer
+  class_path: trainers.SBS_THR_Trainer
   init_args:
     model :
       class_path: models.MLP
       init_args:
         hidden_layer_sizes: [192]
         dropout: 0.4
+    protected_attribute: gender
     learning_rate: 0.0001253
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
 data:
-  class_path: datasets.SBSMIMICEmbeddingModule
+  class_path: datasets.PG_SBS_MIMICDataModule
   init_args:
     data_csv: /Users/bahman/Documents/courses/Fairness/project/code/misc/MIMIC_CXR_EMB/processed_mimic_df.csv
     batch_size: 32

@@ -23,3 +23,8 @@ workdirs
 
 # Checkpoints folder:
 checkpoints
+
+# Bahmans gitignore files:
+datasets/dataset_tests.ipynb
+.DS_Store
+configs/.DS_Store
