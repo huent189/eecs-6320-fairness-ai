@@ -40,9 +40,9 @@ trainer:
   sync_batchnorm: false
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
-pipeline: full
-exp_name: full_test
-version: v1
+pipeline: test
+exp_name: test_last
+version: ee_28
 checkpoint: './workdirs/full_test/AI-debias/9ueihh1r/checkpoints/last.ckpt'
 model:
   class_path: trainers.SBS_THR_Trainer

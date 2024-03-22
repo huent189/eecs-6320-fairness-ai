@@ -28,3 +28,4 @@ checkpoints
 datasets/dataset_tests.ipynb
 .DS_Store
 configs/.DS_Store
+generalized-image-embeddings-for-the-mimic-chest-x-ray-dataset-1.0/

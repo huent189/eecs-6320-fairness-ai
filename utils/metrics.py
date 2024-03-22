@@ -8,14 +8,16 @@ from datasets.mimic_dataset import num_groups_per_attrb, index_to_protected_grou
 def get_overall_acc(true_labels, predictions):
     return (predictions == true_labels).float().mean().item()
 
-def get_overall_fpr(true_labels, predictions):
+def get_overall_fnr(true_labels, predictions):
     return ((true_labels != predictions) * (true_labels)).float().mean().item()
+
+def get_overall_fpr(true_labels, predictions):
+    return ((true_labels != predictions) * (1 - true_labels)).float().mean().item()
 
 def fpr_optimality(true_labels, predictions, lambda_factor):
     accuracy = get_overall_acc(true_labels, predictions)
     fpr = get_overall_fpr(true_labels, predictions)
     return (1 - accuracy) + lambda_factor * fpr
-
 
 
 def compute_optimal_threshold(preds, true_labels):
@@ -43,6 +45,18 @@ def compute_accuracy_per_group(
         group_true = true_labels[idx]
         accuracies.append((group_preds == group_true).float().mean().item())
     return accuracies
+
+
+def compute_fpr_per_group(
+    preds, true_labels, sensitive_attrs, threshold, num_groups
+):
+    fprs = []
+    for group in range(num_groups):
+        idx = sensitive_attrs == group
+        group_preds = (preds[idx] > threshold).int()
+        group_true = true_labels[idx]
+        fprs.append(((group_preds != group_true) * (1 - group_true)).float().mean().item())
+    return fprs
 
 
 class OptimalThresholdSelector(nn.Module):
@@ -88,8 +102,13 @@ class GroupBasedAccuracy(nn.Module):
             accuracies = compute_accuracy_per_group(
                 y_preds, y_trues, group_attrbs[:, i], self.thres, self.num_groups[i]
             )
-            gap = max(accuracies) - min(accuracies)
-            print(f"group {i}: {gap}\n", accuracies)
+            fprs = compute_fpr_per_group(
+                y_preds, y_trues, group_attrbs[:, i], self.thres, self.num_groups[i]
+            )
+            acc_gap = max(accuracies) - min(accuracies)
+            fpr_gap = max(fprs) - min(fprs)
+            print(f"group acc gap {i}: {acc_gap}\n", accuracies)
+            print(f"group fpr gap {i}: {fpr_gap}\n", fprs)
 
 
 class GroupBasedAccuracyVaryingThrs(nn.Module):
@@ -119,6 +138,18 @@ class GroupBasedAccuracyVaryingThrs(nn.Module):
             accuracies.append((group_preds == group_true).float().mean().item())
         return accuracies
 
+    def get_fpr_per_group_var_thrs(
+        self, preds, true_labels, sensitive_attrs, thresholds, attr_idx
+    ):
+        fprs = []
+        for group in range(num_groups_per_attrb[attr_idx]):
+            idx = sensitive_attrs == group
+            group_preds = (preds[idx] > thresholds[group]).int()
+            group_true = true_labels[idx]
+            fprs.append(((group_preds != group_true) and (group_true == 0)).float().mean().item())
+        return fprs
+
+
     def compute_per_group_acc(self, attr):
         y_preds = torch.concat(self.y_preds, dim=0)
         y_trues = torch.concat(self.y_trues, dim=0)
@@ -127,10 +158,19 @@ class GroupBasedAccuracyVaryingThrs(nn.Module):
         accuracies = self.get_acc_per_group_var_thrs(
             y_preds, y_trues, group_attrbs, self.thres, attr
         )
-        gap = max(accuracies) - min(accuracies)
+        fprs = self.get_fpr_per_group_var_thrs(
+            y_preds, y_trues, group_attrbs, self.thres, attr
+        )
+        acc_gap = max(accuracies) - min(accuracies)
+        fpr_gap = max(fprs) - min(fprs)
         print(
-            "Accuracy gap for attribute {attr}: {gap}\n".format(
-                attr=index_to_protected_group[attr], gap=gap
+            "Accuracy gap for attribute {attr}: {acc_gap}\n".format(
+                attr=index_to_protected_group[attr], acc_gap=acc_gap
+            )
+        )
+        print(
+            "FPR gap for attribute {attr}: {fpr_gap}\n".format(
+                attr=index_to_protected_group[attr], fpr_gap=fpr_gap
             )
         )
 

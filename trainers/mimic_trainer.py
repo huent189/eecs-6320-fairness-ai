@@ -238,3 +238,94 @@ class SBS_THR_Trainer(LightningModule):
                 "monitor": "val_loss",
             },
         }
+
+
+
+class SBS_MIMICTrainer(LightningModule):
+    def __init__(
+        self,
+        model,
+        learning_rate=0.001,
+        end_lr_factor=1.0,
+        weight_decay=0.0,
+        decay_steps=1000,
+    ):
+        super().__init__()
+        self.model = model
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.decay_steps = decay_steps
+        self.end_lr_factor = end_lr_factor
+        self.loss = (
+            nn.BCEWithLogitsLoss()
+        )  # For binary classification, adjust if necessary
+        self.acc = torchmetrics.Accuracy(task="binary")
+        self.auroc = torchmetrics.AUROC(task="binary")
+        self.group_acc = GroupBasedAccuracy(num_groups_per_attrb)
+        self.optimal_thres_selector = OptimalThresholdSelector()
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch[:2]
+        y_hat = self(x)
+        loss = self.loss(y_hat, y)
+        self.log_dict({"train_loss": loss})
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch[:2]
+
+        # implement your own
+        out = self(x)
+        loss = self.loss(out, y)
+        out = torch.sigmoid(out)
+        # calculate acc
+        val_acc = self.acc(out, y)
+        val_auc = self.auroc(out, y)
+        # log the outputs!
+        self.log_dict({"val_loss": loss, "val_acc": val_acc, "val_auc": val_auc})
+
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
+        x, y = batch[:2]
+
+        # implement your own
+        out = self(x)
+        # calculate acc
+        out = torch.sigmoid(out)
+        # calculate acc
+        test_acc = self.acc(out, y)
+        test_auc = self.auroc(out, y)
+        # log the outputs!
+        if dataloader_idx != 0:
+            # validation set
+            self.optimal_thres_selector.add_data(out, y)
+            self.log_dict({"final_val_acc": test_acc, "final_val_auc": test_auc})
+        else:
+            # test set
+            self.group_acc(out, y, batch[2])
+            self.log_dict({"test_acc": test_acc, "test_auc": test_auc})
+
+    def on_test_end(self):
+        super().on_test_end()
+        th = self.optimal_thres_selector.compute_optimal_threshold()
+        self.group_acc.set_thres(th)
+        self.group_acc.computer_per_group_acc()
+
+    def configure_optimizers(self):
+        optimizer = torch_optimizer.Lamb(
+            self.model.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay,
+        )
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, patience=5, verbose=True, factor=0.5
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss",
+            },
+        }

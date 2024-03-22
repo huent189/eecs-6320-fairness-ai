@@ -1,4 +1,5 @@
-from .mimic_dataset import MIMICEmbeddingModule, SBSMIMICEmbeddingModule, PG_SBS_MIMICDataModule
+from .mimic_dataset import MIMICEmbeddingModule, SBSMIMICEmbeddingModule, PG_SBS_MIMICDataModule, SBS_MIMICDataModule
 __all__ = ['MIMICEmbeddingModule',
            'SBSMIMICEmbeddingModule',
-           'PG_SBS_MIMICDataModule']
+           'PG_SBS_MIMICDataModule',
+           'SBS_MIMICDataModule']

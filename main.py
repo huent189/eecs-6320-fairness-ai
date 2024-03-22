@@ -5,6 +5,7 @@ from lightning.pytorch.cli import LightningCLI
 import lightning.pytorch as pl
 import os
 
+import torch.multiprocessing
 
 class CustomLightningCLI(LightningCLI):
     def add_arguments_to_parser(self, parser):
@@ -17,6 +18,7 @@ class CustomLightningCLI(LightningCLI):
 # MODEL_REGISTRY.register_classes(trainers, pl.core.lightning.LightningModule)
 # DATAMODULE_REGISTRY.register_classes(datasets, pl.core.LightningDataModule)
 if __name__ == '__main__':
+    torch.multiprocessing.set_sharing_strategy('file_system')
     cli = CustomLightningCLI(
         subclass_mode_model=True,
         subclass_mode_data=True,
