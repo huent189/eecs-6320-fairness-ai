@@ -36,11 +36,25 @@ else:
 device = torch.device(device)
 
 
+gender_labels = ['M', 'F']
+age_labels = ['0-20', '20-40', '40-60', '60-80', '80+']
+race_labels = ['WHITE', 'BLACK/AFRICAN AMERICAN', 'ASIAN',
+               'HISPANIC/LATINO', 'AMERICAN INDIAN/ALASKA NATIVE', 'OTHER']
+group_labels = [gender_labels, age_labels, race_labels]
+ATTRB_LABELS = ['Gender', 'Age', 'Race']
+disease_labels = ['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Enlarged_Cardiomediastinum', 'Fracture',
+                  'Lung_Lesion', 'Lung_Opacity', 'No_Finding', 'Pleural_Effusion', 'Pleural_Other', 'Pneumonia', 'Pneumothorax', 'Support_Devices']
+NO_FINDING_INDEX = 8
+
+
 class MIMICEmbeddingDataset(Dataset):
-    def __init__(self, data_path, split):
+    def __init__(self, data_path, split, subset_ratio=1.0):
         # Load your dataset
         self.data = pd.read_csv(data_path)
-        self.data = self.data[self.data["split"] == split]
+        self.data = self.data[self.data['split'] == split]
+        if subset_ratio != 1.0:
+            self.data = self.data.sample(
+                frac=subset_ratio, random_state=1, replace=False)
 
     def __len__(self):
         return len(self.data)
@@ -61,6 +75,7 @@ class MIMICEmbeddingDataset(Dataset):
             torch.from_numpy(label).float(),
             torch.from_numpy(demographic_data).long(),
         )
+
 
 
 class MIMICEmbeddingModule(LightningDataModule):
@@ -423,7 +438,6 @@ class SBS_MIMICDataModule(LightningDataModule):
             MIMICEmbeddingDataset(self.data_csv, split="validate"),
         ]
 
-    def train_dataloader(self):
         data_loader = DataLoader(
             self.train_set,
             batch_size=self.batch_size,
@@ -548,10 +562,30 @@ class MIMICProtectedGroupDataset(Dataset):
                 race_map[sample["race"]],
             ]
         )
-        emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
+        sample_path = sample["path"]
+        # If the processed data has been made by the tfrecode data, fix the path to use np instead:
+        if '.tf' in sample_path:
+            emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
+        else:
+            emb = np.load(sample["path"], allow_pickle=True)
+
         label = np.array([sample["No_Finding"]])
         return (
             torch.from_numpy(emb).float(),
             torch.from_numpy(label).float(),
             torch.from_numpy(demographic_data).long(),
         )
+
+class MultipleMiMicEmbeddingDataModule(MIMICEmbeddingModule):
+    def __init__(self, data_csv, batch_size, num_workers, trainset_ratios):
+        super().__init__(data_csv, batch_size, num_workers)
+        self.trainset_ratios = trainset_ratios
+
+    def setup(self, stage: str):
+        self.test_set = MIMICEmbeddingDataset(self.data_csv, split='test')
+        self.train_sets = [MIMICEmbeddingDataset(
+            self.data_csv, split='train', subset_ratio=r) for r in self.trainset_ratios]
+        self.val_set = MIMICEmbeddingDataset(self.data_csv, split='validate')
+
+    def train_dataloader(self):
+        return [DataLoader(ts, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True) for ts in self.train_sets]

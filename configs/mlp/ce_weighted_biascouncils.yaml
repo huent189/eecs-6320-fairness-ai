@@ -41,34 +41,33 @@ trainer:
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
 pipeline: full
-exp_name: mlp_biasCouncils
-version: one_model
+exp_name: mlp_2biasCouncils
+version: ce_weighted_biasCouncils_w1
 checkpoint: null
 model:
-  class_path: trainers.BiasCouncilTrainer
+  class_path: trainers.CEWeightedBiasCouncilTrainer
   init_args:
     model :
       class_path: models.MLP
       init_args:
-        hidden_layer_sizes: [512, 256, 192]
+        hidden_layer_sizes: [192]
         dropout: 0.4
         norm: batch
-        num_heads: 14
     bias_model:
       class_path: models.MLP
       init_args:
-        hidden_layer_sizes: [512, 256, 192]
-        dropout: 0.4
-        num_heads: 14
+        hidden_layer_sizes: [512, 256]
+        dropout: 0.0
         norm: batch
-    num_bias_models: 1
+    num_bias_models: 2
     learning_rate: 0.0001253
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
 data:
-  class_path: datasets.MIMICEmbeddingModule
+  class_path: datasets.MultipleMiMicEmbeddingDataModule
   init_args:
     data_csv: /local/ssd/huent/mimic-cxr-emb/processed_mimic_df.csv
     batch_size: 32
     num_workers: 8
+    trainset_ratios: [1.0, 0.5]

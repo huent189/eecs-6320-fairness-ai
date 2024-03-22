@@ -11,15 +11,14 @@ class GeneralizedCELoss(nn.Module):
         self.q = q
              
     def forward(self, logits, targets):
-        p = F.softmax(logits, dim=1)
+        p = torch.sigmoid(logits)
         if np.isnan(p.mean().item()):
             raise NameError('GCE_p')
-        Yg = torch.gather(p, 1, torch.unsqueeze(targets, 1))
+        Yg = p * targets + (1 - p) * (1 - targets)
         # modify gradient of cross entropy
         loss_weight = (Yg.squeeze().detach()**self.q)*self.q
         if np.isnan(Yg.mean().item()):
             raise NameError('GCE_Yg')
-
-        loss = F.cross_entropy(logits, targets, reduction='none') * loss_weight
-
+        loss = F.binary_cross_entropy(p, targets, reduction='none') * loss_weight
+        
         return loss
