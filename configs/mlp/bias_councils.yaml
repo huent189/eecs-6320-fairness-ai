@@ -42,7 +42,7 @@ trainer:
   default_root_dir: ./workdirs/
 pipeline: full
 exp_name: mlp_biasCouncils
-version: train_biascouncils_bn_same
+version: one_model
 checkpoint: null
 model:
   class_path: trainers.BiasCouncilTrainer
@@ -50,15 +50,18 @@ model:
     model :
       class_path: models.MLP
       init_args:
-        hidden_layer_sizes: [192]
+        hidden_layer_sizes: [512, 256, 192]
         dropout: 0.4
         norm: batch
+        num_heads: 14
     bias_model:
       class_path: models.MLP
       init_args:
-        hidden_layer_sizes: [192]
+        hidden_layer_sizes: [512, 256, 192]
         dropout: 0.4
+        num_heads: 14
         norm: batch
+    num_bias_models: 1
     learning_rate: 0.0001253
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
