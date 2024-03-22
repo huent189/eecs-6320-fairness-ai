@@ -24,11 +24,11 @@ cli = CustomLightningCLI(
     run=False,
     trainer_defaults={
         "callbacks": [ModelCheckpoint(
-            filename="{epoch:02d}-{val_auc:.2f}",
-            monitor="val_auc", mode="max",
+            filename="{epoch:02d}",
+            monitor="val/loss", mode="min",
             save_last=True,
             save_top_k=3
-        ), EarlyStopping(monitor="val_loss", mode="min", patience=5)]
+        ), EarlyStopping(monitor="val/loss", mode="min", patience=5)]
     }, save_config_kwargs={"overwrite": True}
 )
 

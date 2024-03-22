@@ -123,7 +123,7 @@ class MIMICTrainer(LightningModule):
             optimizer, patience=3, verbose=True, factor=0.5)
         return {'optimizer': optimizer,
                 'lr_scheduler': {'scheduler': scheduler,
-                                 'monitor': 'val_loss', }}
+                                 'monitor': 'val/loss', }}
 
 
 class BiasCouncilTrainer(MIMICTrainer):
@@ -179,7 +179,7 @@ class BiasCouncilTrainer(MIMICTrainer):
             optimizer, patience=3, verbose=True, factor=0.5)
         return {'optimizer': optimizer,
                 'lr_scheduler': {'scheduler': scheduler,
-                                 'monitor': 'val_loss', }}
+                                 'monitor': 'val/loss', }}
 
 
 class CEWeightedBiasCouncilTrainer(BiasCouncilTrainer):
