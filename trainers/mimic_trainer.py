@@ -9,6 +9,7 @@ import copy
 from losses.gce import GeneralizedCELoss
 import wandb
 
+import torch_optimizer
 
 class MIMICTrainer(LightningModule):
     def __init__(
@@ -348,7 +349,7 @@ class SBS_MIMICTrainer(LightningModule):
         )  # For binary classification, adjust if necessary
         self.acc = torchmetrics.Accuracy(task="binary")
         self.auroc = torchmetrics.AUROC(task="binary")
-        self.group_acc = GroupBasedAccuracy(num_groups_per_attrb)
+        self.group_acc = GroupBasedStats(num_groups_per_attrb)
         self.optimal_thres_selector = OptimalThresholdSelector()
 
     def forward(self, x):
