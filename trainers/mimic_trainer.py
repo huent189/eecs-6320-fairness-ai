@@ -138,7 +138,7 @@ class MIMICTrainer(LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val_loss",
+                "monitor": "val/loss",
             },
         }
 
@@ -279,7 +279,7 @@ class SBS_THR_Trainer(LightningModule):
         val_acc = self.acc(out, y)
         val_auc = self.auroc(out, y)
         # log the outputs!
-        self.log_dict({"val_loss": loss, "val_acc": val_acc, "val_auc": val_auc})
+        self.log_dict({"val/loss": loss, "val/acc": val_acc, "val/auc": val_auc})
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch[:2]
@@ -323,7 +323,7 @@ class SBS_THR_Trainer(LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val_loss",
+                "monitor": "val/loss",
             },
         }
 
@@ -373,7 +373,7 @@ class SBS_MIMICTrainer(LightningModule):
         val_acc = self.acc(out, y)
         val_auc = self.auroc(out, y)
         # log the outputs!
-        self.log_dict({"val_loss": loss, "val_acc": val_acc, "val_auc": val_auc})
+        self.log_dict({"val/loss": loss, "val/acc": val_acc, "val/auc": val_auc})
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch[:2]
@@ -414,6 +414,6 @@ class SBS_MIMICTrainer(LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val_loss",
+                "monitor": "val/loss",
             },
         }

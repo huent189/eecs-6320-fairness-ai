@@ -23,7 +23,6 @@ def fpr_optimality(true_labels, predictions, lambda_factor):
     return (1 - accuracy) + lambda_factor * fpr
 
 
-# TODO: method signature has changed, update usage accordingly!
 def compute_optimal_threshold(preds, true_labels):
     thresholds = np.linspace(0.01, 0.99, num=99)
     delta_th = 0.01
@@ -81,7 +80,6 @@ class OptimalThresholdSelector(nn.Module):
         thres = compute_optimal_threshold(y_preds, y_trues)
         return thres
 
-# TODO: Class signature changed, it was GroupBasedAccuracy before, adjust accordingly!
 class GroupBasedStats(nn.Module):
     def __init__(self, num_groups):
         super(GroupBasedStats, self).__init__()
@@ -163,7 +161,10 @@ class GroupBasedAccuracyVaryingThrs(nn.Module):
             idx = sensitive_attrs == group
             group_preds = (preds[idx] > thresholds[group]).int()
             group_true = true_labels[idx]
-            fprs.append(((group_preds != group_true) and (group_true == 0)).float().mean().item())
+            false_preds = group_preds != group_true
+            negative_labels = group_true == 0
+            fprs_preds = false_preds * negative_labels
+            fprs.append((fprs_preds).float().mean().item())
         return fprs
 
 

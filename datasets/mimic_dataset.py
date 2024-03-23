@@ -68,7 +68,12 @@ class MIMICEmbeddingDataset(Dataset):
                 race_map[sample["race"]],
             ]
         )
-        emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
+        # If the processed data has been made by the tfrecode data, fix the path to use np instead:
+        sample_path = sample["path"]
+        if '.tf' in sample_path:
+            emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
+        else:
+            emb = np.load(sample["path"], allow_pickle=True)
         label = np.array([sample["No_Finding"]])
         return (
             torch.from_numpy(emb).float(),
@@ -589,3 +594,214 @@ class MultipleMiMicEmbeddingDataModule(MIMICEmbeddingModule):
 
     def train_dataloader(self):
         return [DataLoader(ts, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True) for ts in self.train_sets]
+
+
+
+
+class TinyMIMICEmbeddingDataset(Dataset):
+    def __init__(self, data_path, split, subset_ratio=1.0):
+        # Load your dataset
+        self.data = pd.read_csv(data_path)
+        self.data = self.data[self.data['split'] == split]
+        self.data = self.data[:15]
+        if subset_ratio != 1.0:
+            self.data = self.data.sample(
+                frac=subset_ratio, random_state=1, replace=False)
+
+    def __len__(self):
+        return 15
+
+    def __getitem__(self, idx):
+        sample = self.data.iloc[idx]
+        demographic_data = np.array(
+            [
+                gender_map[sample["gender"]],
+                age_map[sample["age_decile"]],
+                race_map[sample["race"]],
+            ]
+        )
+        # If the processed data has been made by the tfrecode data, fix the path to use np instead:
+        sample_path = sample["path"]
+        if '.tf' in sample_path:
+            emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
+        else:
+            emb = np.load(sample["path"], allow_pickle=True)
+        label = np.array([sample["No_Finding"]])
+        return (
+            torch.from_numpy(emb).float(),
+            torch.from_numpy(label).float(),
+            torch.from_numpy(demographic_data).long(),
+        )
+    
+
+class TinyPG_SBS_MIMICDataModule(LightningDataModule):
+    """
+    Data module that simultaneously implements MIMICProtectedGroupDataModule
+    for the validation loader and
+    SBSMIMICEmbeddingModule for the training and test.
+    """
+
+    def __init__(self, data_csv, batch_size, num_workers, protected_attrb):
+        super().__init__()
+        self.protected_attrb = protected_attrb
+        self.protected_group_map = protected_group_name_2_map[protected_attrb]
+        self.data_csv = data_csv
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+    def setup(self, stage: str):
+        self.train_set = TinyMIMICEmbeddingDataset(self.data_csv, split="train")
+        self.val_set = TinyMIMICEmbeddingDataset(self.data_csv, split="validate")
+        self.test_sets = [TinyMIMICEmbeddingDataset(self.data_csv, split="test")] + [
+            TinyMIMICProtectedGroupDataset(
+                self.data_csv,
+                split="validate",
+                protected_attribute=self.protected_attrb,
+                protected_attribute_value=pav,
+            )
+            for pav in self.protected_group_map.keys()
+        ]
+
+    def train_dataloader(self):
+        data_loader = DataLoader(
+            self.train_set,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
+        sampler = WeightedRandomSampler(weights, len(weights))
+        train_loader = DataLoader(
+            self.train_set,
+            batch_size=self.batch_size,
+            shuffle=False,
+            sampler=sampler,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        return train_loader
+
+    def test_dataloader(self):
+        data_loader = DataLoader(
+            self.test_sets[0],
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
+        sampler = WeightedRandomSampler(weights, len(weights))
+        test_loader = DataLoader(
+            self.test_sets[0],
+            batch_size=self.batch_size,
+            shuffle=False,
+            sampler=sampler,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        val_loaders = [
+            DataLoader(
+                test_set,
+                batch_size=self.batch_size,
+                shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=True,
+            )
+            for test_set in self.test_sets[1:]
+        ]
+        return [test_loader] + val_loaders
+
+    def val_dataloader(self):
+        data_loader = DataLoader(
+            self.val_set,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
+        sampler = WeightedRandomSampler(weights, len(weights))
+        val_loader = DataLoader(
+            self.val_set,
+            batch_size=self.batch_size,
+            shuffle=False,
+            sampler=sampler,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        return val_loader
+
+    def make_weights_for_balanced_classes(self, data_csv, data_loader):
+        data = pd.read_csv(data_csv)[:15]
+        protected_group_weights = {}
+        protected_group_name_2_map = {
+            "gender": gender_map,
+            "age_decile": age_map,
+            "race": race_map,
+        }
+        sum_weights = 0
+        protected_group_map = protected_group_name_2_map[self.protected_attrb]
+        for k in protected_group_map.keys():
+            num_group = data[data[self.protected_attrb] == k].shape[0]
+            weight_group = 1.0 / (num_group + 0.01)
+            protected_group_weights[protected_group_map[k]] = weight_group
+            sum_weights += weight_group
+
+        # This is not strictly necessary, but makes for a more easy to read weight ratio
+        for k in protected_group_map.keys():
+            protected_group_weights[protected_group_map[k]] /= sum_weights
+
+        weight = torch.zeros(data.shape[0]).to(device)
+        protected_group_idx = protected_group_to_index[self.protected_attrb]
+        for i, (emb, _, demographic_data) in enumerate(data_loader):
+            idxs = torch.arange(0, emb.shape[0]) + (i * self.batch_size)
+            idxs = idxs.to(dtype=torch.long, device=device)
+            for j, idx in enumerate(idxs):
+                weight[idx] = protected_group_weights[
+                    demographic_data[j, protected_group_idx].item()
+                ]
+        return weight
+    
+
+
+class TinyMIMICProtectedGroupDataset(Dataset):
+    def __init__(
+        self, data_path, split, protected_attribute, protected_attribute_value
+    ):
+        # Load your dataset
+        self.data = pd.read_csv(data_path)
+        self.data = self.data[self.data["split"] == split]
+        # Only choose rows with a specific vlue for a protected attribute
+        self.protected_attribute = protected_attribute
+        self.protected_attribute_value = protected_attribute_value
+        self.data = self.data[
+            self.data[protected_attribute] == protected_attribute_value
+        ]
+        self.data = self.data[:15]
+
+    def __len__(self):
+        return 15
+
+    def __getitem__(self, idx):
+        sample = self.data.iloc[idx]
+        demographic_data = np.array(
+            [
+                gender_map[sample["gender"]],
+                age_map[sample["age_decile"]],
+                race_map[sample["race"]],
+            ]
+        )
+        sample_path = sample["path"]
+        # If the processed data has been made by the tfrecode data, fix the path to use np instead:
+        if '.tf' in sample_path:
+            emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
+        else:
+            emb = np.load(sample["path"], allow_pickle=True)
+
+        label = np.array([sample["No_Finding"]])
+        return (
+            torch.from_numpy(emb).float(),
+            torch.from_numpy(label).float(),
+            torch.from_numpy(demographic_data).long(),
+        )
