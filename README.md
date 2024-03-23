@@ -34,7 +34,7 @@ python main.py --config configs/mlp/vanila.yaml
     - [x] GCE loss function
     - [ ] Hue's new loss function 
 - General:
-    - [ ] Add dataset with labels for each disease (vs. No Finding/Finding). 
+    - [x] Add dataset with labels for each disease (vs. No Finding/Finding). 
     - [ ] Add image dataset (?)  
     - [ ] Add other metrics:
         - [ ] FPR 

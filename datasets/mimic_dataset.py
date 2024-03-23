@@ -74,7 +74,7 @@ class MIMICEmbeddingDataset(Dataset):
             emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
         else:
             emb = np.load(sample["path"], allow_pickle=True)
-        label = np.array([sample["No_Finding"]])
+        label = np.array([sample[d] for d in disease_labels])
         return (
             torch.from_numpy(emb).float(),
             torch.from_numpy(label).float(),
@@ -574,7 +574,7 @@ class MIMICProtectedGroupDataset(Dataset):
         else:
             emb = np.load(sample["path"], allow_pickle=True)
 
-        label = np.array([sample["No_Finding"]])
+        label = np.array([sample[d] for d in disease_labels])
         return (
             torch.from_numpy(emb).float(),
             torch.from_numpy(label).float(),
@@ -626,7 +626,7 @@ class TinyMIMICEmbeddingDataset(Dataset):
             emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
         else:
             emb = np.load(sample["path"], allow_pickle=True)
-        label = np.array([sample["No_Finding"]])
+        label = np.array([sample[d] for d in disease_labels])
         return (
             torch.from_numpy(emb).float(),
             torch.from_numpy(label).float(),
@@ -799,7 +799,7 @@ class TinyMIMICProtectedGroupDataset(Dataset):
         else:
             emb = np.load(sample["path"], allow_pickle=True)
 
-        label = np.array([sample["No_Finding"]])
+        label = np.array([sample[d] for d in disease_labels])
         return (
             torch.from_numpy(emb).float(),
             torch.from_numpy(label).float(),
