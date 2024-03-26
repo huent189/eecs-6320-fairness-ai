@@ -35,7 +35,7 @@ if __name__ == '__main__':
     )
 
     cli.trainer.logger = pl.loggers.wandb.WandbLogger(project='AI-debias', save_dir=os.path.join(cli.config['trainer']['default_root_dir'], cli.config['exp_name']), name=cli.config["version"],
-                                                    log_model="all", entity='huent189')
+                                                    log_model="all", entity='bahman')
     if cli.config["pipeline"] == "full":
         cli.trainer.fit(cli.model, cli.datamodule,
                         ckpt_path=cli.config["checkpoint"])

@@ -17,10 +17,11 @@ def get_overall_fnr(true_labels, predictions):
 def get_overall_fpr(true_labels, predictions):
     return ((true_labels != predictions) * (1 - true_labels)).float().mean().item()
 
-def fpr_optimality(true_labels, predictions, lambda_factor):
+def fpr_optimality(true_labels, ys, lambda_factor, thresh):
+    predictions = (ys > thresh).int()
     accuracy = get_overall_acc(true_labels, predictions)
-    fpr = get_overall_fpr(true_labels, predictions)
-    return (1 - accuracy) + lambda_factor * fpr
+    fpr_val = fpr(true_labels, predictions, thresh)
+    return (1 - accuracy) + lambda_factor * fpr_val
 
 
 def compute_optimal_threshold(preds, true_labels):
@@ -126,7 +127,7 @@ class GroupBasedStats(nn.Module):
 
 
 
-class GroupBasedAccuracyVaryingThrs(nn.Module):
+class GroupBasedStatsVaryingThrs(nn.Module):
     def __init__(self):
         super().__init__()
         self.y_preds = []
@@ -158,20 +159,37 @@ class GroupBasedAccuracyVaryingThrs(nn.Module):
     ):
         fprs = []
         for group in range(num_groups_per_attrb[attr_idx]):
-            idx = sensitive_attrs == group
-            group_preds = (preds[idx] > thresholds[group]).int()
+            idx = (sensitive_attrs == group)
+            group_preds = preds[idx] 
             group_true = true_labels[idx]
-            false_preds = group_preds != group_true
-            negative_labels = group_true == 0
-            fprs_preds = false_preds * negative_labels
-            fprs.append((fprs_preds).float().mean().item())
+            fprs.append(fpr(group_preds, group_true, thresholds[group]).item())
         return fprs
 
-
-    def compute_per_group_acc(self, attr):
+    def get_all_stats(self):        
         y_preds = torch.concat(self.y_preds, dim=0)
         y_trues = torch.concat(self.y_trues, dim=0)
-        print("GAP")
+        group_attrbs = torch.concat(self.group_attrbs, dim=0)
+        accuracy_gaps = []
+        fpr_gaps =[]
+        accuracies_all_groups = []
+        fpr_all_groups = []
+        for attr in range(group_attrbs.shape[-1]):
+            accuracies = self.get_acc_per_group_var_thrs(
+                y_preds, y_trues, group_attrbs, self.thres, attr
+            )
+            accuracies_all_groups.append(accuracies)
+            accuracy_gaps.append(max(accuracies) - min(accuracies))
+            fprs = self.get_fpr_per_group_var_thrs(
+                y_preds, y_trues, group_attrbs, self.thres, attr
+            )
+            fpr_all_groups.append(fprs)
+            fpr_gaps.append(max(fprs) - min(fprs))
+        return accuracies_all_groups, accuracy_gaps, fpr_all_groups, fpr_gaps
+
+
+    def get_per_group_stats(self, attr):
+        y_preds = torch.concat(self.y_preds, dim=0)
+        y_trues = torch.concat(self.y_trues, dim=0)
         group_attrbs = torch.concat(self.group_attrbs, dim=0)
         accuracies = self.get_acc_per_group_var_thrs(
             y_preds, y_trues, group_attrbs, self.thres, attr
@@ -179,6 +197,10 @@ class GroupBasedAccuracyVaryingThrs(nn.Module):
         fprs = self.get_fpr_per_group_var_thrs(
             y_preds, y_trues, group_attrbs, self.thres, attr
         )
+        return accuracies, fprs
+
+    def compute_per_group_stats(self, attr):
+        accuracies, fprs = self.get_per_group_stats(attr)
         acc_gap = max(accuracies) - min(accuracies)
         fpr_gap = max(fprs) - min(fprs)
         print(
@@ -209,16 +231,18 @@ class OptimalThresholdPerGroup(nn.Module):
             self.y_trues[group_idx] = [y_true]
 
     def get_optimal_threshold(self, y_preds, y_trues):
-        thresholds = np.linspace(0, 1, num=100)
-        best_score = 0
-        best_threshold = 0
+        thresholds = np.linspace(0.01, 0.99, num=100)
+        best_loss = 9e10
+        best_threshold = None
         for thresh in thresholds:
             # Convert predictions to binary using threshold
-            binary_preds = (y_preds > thresh).int()
-            score = fpr_optimality(y_trues.cpu(), binary_preds.cpu(), self.lambda_factor)
-            if score > best_score:
-                best_score = score
+            # binary_preds = (y_preds > thresh).int()
+            loss = fpr_optimality(y_trues.cpu(), y_preds.cpu(), self.lambda_factor, thresh)
+            if loss < best_loss:
+                best_loss = loss
                 best_threshold = thresh
+                print(best_threshold)
+        assert best_threshold is not None, 'assertion error, no best threshold was found, change the initial value of the best loss.'
         return best_threshold
 
     def compute_optimal_thresholds(self):

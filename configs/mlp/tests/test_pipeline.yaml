@@ -1,0 +1,67 @@
+# lightning.pytorch==2.1.4
+seed_everything: 19
+trainer:
+  accelerator: auto
+  strategy: auto
+  devices: 1
+  num_nodes: 1
+  precision: null
+  logger: null
+  callbacks: null
+  fast_dev_run: false
+  max_epochs: 3
+  min_epochs: null
+  max_steps: -1
+  min_steps: null
+  max_time: null
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  overfit_batches: 0.0
+  val_check_interval: null
+  check_val_every_n_epoch: 1
+  num_sanity_val_steps: null
+  log_every_n_steps: 460
+  enable_checkpointing: null
+  enable_progress_bar: null
+  enable_model_summary: null
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  gradient_clip_algorithm: null
+  deterministic: null
+  benchmark: null
+  inference_mode: true
+  use_distributed_sampler: true
+  profiler: null
+  detect_anomaly: false
+  barebones: false
+  plugins: null
+  sync_batchnorm: false
+  reload_dataloaders_every_n_epochs: 0
+  default_root_dir: ./workdirs/
+pipeline: full
+exp_name: test_pipeline
+version: t1
+# checkpoint: './workdirs/full_test/AI-debias/9ueihh1r/checkpoints/last.ckpt'
+model:
+  class_path: trainers.SBS_THR_Trainer
+  init_args:
+    model :
+      class_path: models.MLP
+      init_args:
+        hidden_layer_sizes: [512, 256, 192]
+        dropout: 0.4
+        norm: batch
+        num_heads: 14
+    learning_rate: 0.0001253
+    end_lr_factor: 1.0
+    weight_decay: 1.1342834436836775e-05
+    decay_steps: 1000
+data:
+  class_path: datasets.TinyPG_SBS_MIMICDataModule
+  init_args:
+    data_csv: /home/brouhani/Documents/courses/fairness/data/processed_mimic_df.csv
+    batch_size: 32
+    num_workers: 8
+    protected_attrb: gender

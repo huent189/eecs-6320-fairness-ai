@@ -596,8 +596,6 @@ class MultipleMiMicEmbeddingDataModule(MIMICEmbeddingModule):
         return [DataLoader(ts, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True) for ts in self.train_sets]
 
 
-
-
 class TinyMIMICEmbeddingDataset(Dataset):
     def __init__(self, data_path, split, subset_ratio=1.0):
         # Load your dataset

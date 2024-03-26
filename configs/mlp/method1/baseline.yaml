@@ -9,7 +9,7 @@ trainer:
   logger: null
   callbacks: null
   fast_dev_run: false
-  max_epochs: 3
+  max_epochs: 50
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -40,27 +40,28 @@ trainer:
   sync_batchnorm: false
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
-pipeline: full
-exp_name: test_pipeline
-version: t1
-# checkpoint: './workdirs/full_test/AI-debias/9ueihh1r/checkpoints/last.ckpt'
+pipeline: test
+exp_name: sbs_full
+version: base_pipe_th_model
+# checkpoint: './workdirs/sbs_full/AI-debias/znrggn2l/checkpoints/last.ckpt'
+checkpoint: './workdirs/sbsth_full/AI-debias/urhjj8r2/checkpoints/last.ckpt'
 model:
-  class_path: trainers.SBS_THR_Trainer
+  class_path: trainers.MIMICTrainer
   init_args:
     model :
       class_path: models.MLP
       init_args:
-        hidden_layer_sizes: [192]
+        hidden_layer_sizes: [512, 256, 192]
         dropout: 0.4
-    # protected_attribute: gender
+        norm: batch
+        num_heads: 14
     learning_rate: 0.0001253
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
 data:
-  class_path: datasets.TinyPG_SBS_MIMICDataModule
+  class_path: datasets.MIMICEmbeddingModule
   init_args:
-    data_csv: /Users/bahman/Documents/courses/Fairness/project/code/misc/MIMIC_CXR_EMB/processed_mimic_df.csv
+    data_csv: /home/brouhani/Documents/courses/fairness/data/processed_mimic_df.csv
     batch_size: 32
     num_workers: 8
-    protected_attrb: gender
