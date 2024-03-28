@@ -70,12 +70,12 @@ class MIMICTrainer(LightningModule):
         # log the outputs!
         if dataloader_idx == 0:
             self.optimal_thres_selector.add_data(
-                out[:, self.datamodule.NO_FINDING_INDEX, None], y[:, self.datamodule.NO_FINDING_INDEX, None])
+                out[:, self.trainer.datamodule.NO_FINDING_INDEX, None], y[:, self.trainer.datamodule.NO_FINDING_INDEX, None])
             self.average_auroc.update(out, y)
             self.log_dict({'val/final_acc': avg_acc})
         else:
-            self.group_metrics(out[:, self.datamodule.NO_FINDING_INDEX, None],
-                               y[:, self.datamodule.NO_FINDING_INDEX, None], batch[2])
+            self.group_metrics(out[:, self.trainer.datamodule.NO_FINDING_INDEX, None],
+                               y[:, self.trainer.datamodule.NO_FINDING_INDEX, None], batch[2])
             self.per_label_auroc.update(out, y)
             self.log_dict({'test/acc': avg_acc})
 
@@ -86,7 +86,7 @@ class MIMICTrainer(LightningModule):
         test_per_label_auroc = self.per_label_auroc.compute()
         # First column is disease name, second column is auroc
         table_data = [[d, test_per_label_auroc[i].item()]
-                      for i, d in enumerate(self.datamodule.disease_labels)]
+                      for i, d in enumerate(self.trainer.datamodule.disease_labels)]
         table_data.append(['Average', test_per_label_auroc.mean().item()])
         self.logger.experiment.log(
             {"test/per_label_auroc": wandb.Table(data=table_data, columns=["disease", "auroc"])})
@@ -127,7 +127,7 @@ class MIMICTrainer(LightningModule):
 
 
 class BiasCouncilTrainer(MIMICTrainer):
-    def __init__(self, model, bias_model, num_bias_models=1, learning_rate=0.001, end_lr_factor=1.0, weight_decay=0.0, decay_steps=1000):
+    def __init__(self, model, bias_model, num_bias_models=1, learning_rate=0.001, end_lr_factor=1.0, weight_decay=0.0, decay_steps=1000, biased_loss_weight=5):
         super(BiasCouncilTrainer, self).__init__(
             model, learning_rate, end_lr_factor, weight_decay, decay_steps)
         self.bias_councils = nn.ModuleList(
@@ -136,6 +136,7 @@ class BiasCouncilTrainer(MIMICTrainer):
             m.init_weights()
         self.gce = GeneralizedCELoss()
         self.num_bias_models = num_bias_models
+        self.biased_loss_weight = biased_loss_weight
 
     def training_step(self, batch, batch_idx):
         if not isinstance(batch[0], list):
@@ -164,7 +165,7 @@ class BiasCouncilTrainer(MIMICTrainer):
         unbiased_loss = unbiased_loss + \
             (1 - p_y_hat) * self.loss(unbiased_y_hat, 1 - p_y_hat)
         unbiased_loss = unbiased_loss.mean()
-        loss = biased_loss * 5 + unbiased_loss
+        loss = biased_loss * self.biased_loss_weight + unbiased_loss
         self.log_dict({'biased_loss': biased_loss,
                       'unbiased_loss': unbiased_loss, 'loss': loss})
         return loss

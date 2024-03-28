@@ -1,9 +1,10 @@
 from datasets import *
 from trainers import *
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.cli import LightningCLI
+from lightning.pytorch.cli import LightningCLI, SaveConfigCallback
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+from lightning.pytorch.loggers.logger import Logger
 import os
 
 
@@ -15,8 +16,15 @@ class CustomLightningCLI(LightningCLI):
         parser.add_argument("--checkpoint")
 
 
+class LoggerSaveConfigCallback(SaveConfigCallback):
+    def save_config(self, trainer, pl_module, stage) -> None:
+        if isinstance(trainer.logger, Logger):
+            # Required for proper reproducibility
+            config = self.parser.dump(self.config, skip_none=False)
+            trainer.logger.log_hyperparams({"config": config})
 # MODEL_REGISTRY.register_classes(trainers, pl.core.lightning.LightningModule)
 # DATAMODULE_REGISTRY.register_classes(datasets, pl.core.LightningDataModule)
+
 
 cli = CustomLightningCLI(
     subclass_mode_model=True,
@@ -29,7 +37,7 @@ cli = CustomLightningCLI(
             save_last=True,
             save_top_k=3
         ), EarlyStopping(monitor="val/loss", mode="min", patience=5)]
-    }, save_config_kwargs={"overwrite": True}
+    }, save_config_callback=LoggerSaveConfigCallback, save_config_kwargs={"overwrite": True}
 )
 
 cli.trainer.logger = pl.loggers.wandb.WandbLogger(project='AI-debias', save_dir=os.path.join(cli.config['trainer']['default_root_dir'], cli.config['exp_name']), name=cli.config["version"],
