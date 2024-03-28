@@ -3,7 +3,7 @@ from torch import nn
 import torch.optim as optim
 from lightning.pytorch.core.module import LightningModule
 import torchmetrics
-from datasets.mimic_dataset import num_groups_per_attrb, group_labels, disease_labels, NO_FINDING_INDEX, ATTRB_LABELS
+from datasets.constant import num_diseases, num_groups_per_attrb, group_labels, ATTRB_LABELS
 from utils.metrics import GroupBasedStats, OptimalThresholdSelector
 import copy
 from losses.gce import GeneralizedCELoss
@@ -21,11 +21,11 @@ class MIMICTrainer(LightningModule):
         # For binary classification, adjust if necessary
         self.loss = nn.BCEWithLogitsLoss(reduction='none')
         self.acc = torchmetrics.classification.MultilabelAccuracy(
-            num_labels=len(disease_labels))
+            num_labels=num_diseases)
         self.average_auroc = torchmetrics.classification.MultilabelAUROC(
-            num_labels=len(disease_labels))
+            num_labels=num_diseases)
         self.per_label_auroc = torchmetrics.classification.MultilabelAUROC(
-            num_labels=len(disease_labels), average='none')
+            num_labels=num_diseases, average='none')
         self.group_metrics = GroupBasedStats(num_groups_per_attrb)
         self.group_labels = group_labels
         self.optimal_thres_selector = OptimalThresholdSelector()
@@ -52,7 +52,7 @@ class MIMICTrainer(LightningModule):
         val_acc = self.acc(out, y)
         self.average_auroc.update(out, y)
         # log the outputs!
-        self.log_dict({'val/loss': loss, 'val/acc': val_acc})
+        self.log_dict({'val/loss': loss, 'val/acc': val_acc}, prog_bar=True)
 
     def on_validation_end(self):
         super().on_validation_end()
@@ -70,12 +70,12 @@ class MIMICTrainer(LightningModule):
         # log the outputs!
         if dataloader_idx == 0:
             self.optimal_thres_selector.add_data(
-                out[:, NO_FINDING_INDEX, None], y[:, NO_FINDING_INDEX, None])
+                out[:, self.datamodule.NO_FINDING_INDEX, None], y[:, self.datamodule.NO_FINDING_INDEX, None])
             self.average_auroc.update(out, y)
             self.log_dict({'val/final_acc': avg_acc})
         else:
-            self.group_metrics(out[:, NO_FINDING_INDEX, None],
-                               y[:, NO_FINDING_INDEX, None], batch[2])
+            self.group_metrics(out[:, self.datamodule.NO_FINDING_INDEX, None],
+                               y[:, self.datamodule.NO_FINDING_INDEX, None], batch[2])
             self.per_label_auroc.update(out, y)
             self.log_dict({'test/acc': avg_acc})
 
@@ -86,7 +86,7 @@ class MIMICTrainer(LightningModule):
         test_per_label_auroc = self.per_label_auroc.compute()
         # First column is disease name, second column is auroc
         table_data = [[d, test_per_label_auroc[i].item()]
-                      for i, d in enumerate(disease_labels)]
+                      for i, d in enumerate(self.datamodule.disease_labels)]
         table_data.append(['Average', test_per_label_auroc.mean().item()])
         self.logger.experiment.log(
             {"test/per_label_auroc": wandb.Table(data=table_data, columns=["disease", "auroc"])})

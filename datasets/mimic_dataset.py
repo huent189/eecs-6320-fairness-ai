@@ -5,23 +5,15 @@ import pytorch_lightning as pl
 from lightning.pytorch.core.datamodule import LightningDataModule
 import numpy as np
 
-gender_map = {'M': 0, 'F': 1}
-age_map = {'40-60': 2, '80+': 4, '60-80': 3, '0-20': 0, '20-40': 1}
-race_map = {'WHITE': 0, 'BLACK/AFRICAN AMERICAN': 1, 'ASIAN': 2, 'HISPANIC/LATINO': 3, 'AMERICAN INDIAN/ALASKA NATIVE': 4,
-            'OTHER': 5}
-num_groups_per_attrb = [2, 5, 6]
-gender_labels = ['M', 'F']
-age_labels = ['0-20', '20-40', '40-60', '60-80', '80+']
-race_labels = ['WHITE', 'BLACK/AFRICAN AMERICAN', 'ASIAN',
-               'HISPANIC/LATINO', 'AMERICAN INDIAN/ALASKA NATIVE', 'OTHER']
-group_labels = [gender_labels, age_labels, race_labels]
-ATTRB_LABELS = ['Gender', 'Age', 'Race']
-disease_labels = ['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Enlarged_Cardiomediastinum', 'Fracture',
-                  'Lung_Lesion', 'Lung_Opacity', 'No_Finding', 'Pleural_Effusion', 'Pleural_Other', 'Pneumonia', 'Pneumothorax', 'Support_Devices']
-NO_FINDING_INDEX = 8
-
 
 class MIMICEmbeddingDataset(Dataset):
+    gender_map = {'M': 0, 'F': 1}
+    age_map = {'40-60': 2, '80+': 4, '60-80': 3, '0-20': 0, '20-40': 1}
+    race_map = {'WHITE': 0, 'BLACK/AFRICAN AMERICAN': 1, 'ASIAN': 2, 'HISPANIC/LATINO': 3, 'AMERICAN INDIAN/ALASKA NATIVE': 4,
+                'OTHER': 5}
+    disease_labels = ['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Enlarged_Cardiomediastinum', 'Fracture',
+                    'Lung_Lesion', 'Lung_Opacity', 'No_Finding', 'Pleural_Effusion', 'Pleural_Other', 'Pneumonia', 'Pneumothorax', 'Support_Devices']
+    NO_FINDING_INDEX = 8
     def __init__(self, data_path, split, subset_ratio=1.0):
         # Load your dataset
         self.data = pd.read_csv(data_path)
@@ -36,13 +28,15 @@ class MIMICEmbeddingDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.data.iloc[idx]
         demographic_data = np.array(
-            [gender_map[sample['gender']], age_map[sample['age_decile']], race_map[sample['race']]])
+            [self.gender_map[sample['gender']], self.age_map[sample['age_decile']], self.race_map[sample['race']]])
         emb = np.load(sample['path'], allow_pickle=True)
-        label = np.array([sample[d] for d in disease_labels])
+        label = np.array([sample[d] for d in self.disease_labels])
         return torch.from_numpy(emb).float(), torch.from_numpy(label).float(), torch.from_numpy(demographic_data).long()
 
 
 class MIMICEmbeddingModule(LightningDataModule):
+    NO_FINDING_INDEX = MIMICEmbeddingDataset.NO_FINDING_INDEX
+    disease_labels = MIMICEmbeddingDataset.disease_labels
     def __init__(self, data_csv, batch_size, num_workers):
         super().__init__()
         self.data_csv = data_csv
