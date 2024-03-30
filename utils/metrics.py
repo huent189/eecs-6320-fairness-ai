@@ -33,7 +33,30 @@ def fpr(preds, true_labels, threshold):
     tn = stat_scores[..., 2]
     return fp / (fp + tn)
 
-
+def classification_metrics(preds, true_labels, threshold):
+    # [tp, fp, tn, fn, sup] (sup stands for support and equals tp + fn).
+    stat_scores = torchmetrics.functional.classification.binary_stat_scores(
+        preds, true_labels, threshold)
+    # compute all metrics that we need and return its as a dictionary
+    outputs = {}
+    tp = stat_scores[..., 0]
+    fp = stat_scores[..., 1]
+    tn = stat_scores[..., 2]
+    fn = stat_scores[..., 3]
+    outputs['accuracy'] = (tp + tn) / (tp + fp + tn + fn)
+    outputs['fpr'] = fp / (fp + tn)
+    outputs['tpr'] = tp / (tp + fn)
+    outputs['fdr'] = fp / (tp + fp)
+    return outputs
+def compute_per_group_metrics(preds, true_labels, sensitive_attrs, threshold, num_groups):
+    metrics = []
+    for group in range(num_groups):
+        idx = (sensitive_attrs == group)
+        group_preds = preds[idx]
+        group_true = true_labels[idx]
+        group_metrics = classification_metrics(group_preds, group_true, threshold)
+        metrics.append(group_metrics)
+    return metrics
 def compute_fpr_per_group(preds, true_labels, sensitive_attrs, threshold, num_groups):
     fprs = []
     for group in range(num_groups):
@@ -102,3 +125,14 @@ class GroupBasedStats(nn.Module):
                 y_preds, y_trues, group_attrbs[:, i], self.thres, self.num_groups[i])
             group_fprs.append(fprs)
         return group_fprs
+    
+    def computer_per_group_classification_metrics(self):
+        y_preds = torch.concat(self.y_preds, dim=0)
+        y_trues = torch.concat(self.y_trues, dim=0)
+        group_attrbs = torch.concat(self.group_attrbs, dim=0)
+        group_metrics = []
+        for i in range(group_attrbs.shape[-1]):
+            metrics = compute_per_group_metrics(
+                y_preds, y_trues, group_attrbs[:, i], self.thres, self.num_groups[i])
+            group_metrics.append(metrics)
+        return group_metrics

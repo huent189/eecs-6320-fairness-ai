@@ -96,32 +96,35 @@ class MIMICTrainer(LightningModule):
                                     'test/f1_score': best_f1_score})
 
         self.group_metrics.set_thres(th)
-        group_fprs = self.group_metrics.computer_per_group_fpr()
-        # First column is attb, second column is fpr, third column is fpr_gap
+        group_metrics = self.group_metrics.computer_per_group_classification_metrics()
+        # First column is attb, the metric and metric_gap
         table_data = []
-        for i, group in enumerate(group_fprs):
-            mu_fpr = sum(group) / len(group)
-            fpr_plot_per_attb = []
+        metric_names = group_metrics[0][0].keys()
+
+        for i, group in enumerate(group_metrics):
             attb = ATTRB_LABELS[i]
-            for j, fpr in enumerate(group):
+            for m in metric_names:
+                tab = wandb.Table(columns=["Label", m])
+                for j in range(len(group)):
+                    sub_group_label = group_labels[i][j]
+                    tab.add_data(sub_group_label, group_metrics[i][j][m])
+                self.logger.experiment.log(
+                    {f'test/{attb}_{m}': wandb.plot.bar(tab, 'Label', m, title=f'{m} for {attb}')})
+        tab = wandb.Table(columns=["Label"] + list(metric_names))
+        for i, group in enumerate(group_metrics):
+            attb = ATTRB_LABELS[i]
+            for j in range(len(group)):
                 sub_group_label = group_labels[i][j]
-                table_data.append([sub_group_label, fpr, fpr - mu_fpr])
-                fpr_plot_per_attb.append([sub_group_label, fpr])
-            table_data.append(
-                [f'Average fpr of {attb} attribute', mu_fpr, -1])
-            fpr_per_attb_table = wandb.Table(data=fpr_plot_per_attb, columns=[
-                                             "Label", "FPR"])
-            self.logger.experiment.log(
-                {f'test/{attb}': wandb.plot.bar(fpr_per_attb_table, 'Label', 'FPR', title=f'FPR for {attb}')})
+                tab.add_data(sub_group_label, *[group[i][k] for k in metric_names])
         self.logger.experiment.log(
-            {"test/fpr_summary": wandb.Table(data=table_data, columns=["Attribute", "fpr", "fpr_gap"])})
+            {"test/summary": tab})
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(
+        self.optimizer = torch.optim.Adam(self.model.parameters(
         ), lr=self.learning_rate, weight_decay=self.weight_decay)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, patience=3, verbose=True, factor=0.5)
-        return {'optimizer': optimizer,
+            self.optimizer, patience=3, verbose=True, factor=0.5, mode='min')
+        return {'optimizer': self.optimizer,
                 'lr_scheduler': {'scheduler': scheduler,
                                  'monitor': 'val/loss', }}
 
@@ -174,11 +177,11 @@ class BiasCouncilTrainer(MIMICTrainer):
         params = list(self.model.parameters())
         for m in self.bias_councils:
             params += list(m.parameters())
-        optimizer = torch.optim.Adam(
+        self.optimizer = torch.optim.Adam(
             params, lr=self.learning_rate, weight_decay=self.weight_decay, capturable=True)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, patience=3, verbose=True, factor=0.5)
-        return {'optimizer': optimizer,
+            self.optimizer, patience=3, verbose=True, factor=0.5, mode='min')
+        return {'optimizer': self.optimizer,
                 'lr_scheduler': {'scheduler': scheduler,
                                  'monitor': 'val/loss', }}
 
@@ -207,6 +210,60 @@ class CEWeightedBiasCouncilTrainer(BiasCouncilTrainer):
             (ce_biased_loss + unbiased_loss.detach())
         unbiased_loss = unbiased_loss.mean()
         loss = biased_loss + unbiased_loss
+        self.log_dict({'biased_loss': biased_loss,
+                      'unbiased_loss': unbiased_loss, 'loss': loss})
+        return loss
+
+
+class OrthogonalBiasCouncilsTrainer(BiasCouncilTrainer):
+    def __init__(self, model, bias_model, num_bias_models=1, learning_rate=0.001, end_lr_factor=1.0, weight_decay=0.0, decay_steps=1000, biased_loss_weight=5):
+        super().__init__(model, bias_model, num_bias_models, learning_rate,
+                         end_lr_factor, weight_decay, decay_steps, biased_loss_weight)
+        self.loss_ort = nn.CosineSimilarity(dim=1)
+        self.grads = []
+        for i in range(self.num_bias_models):
+            self.bias_councils[i].set_hook(self.save_grads)
+
+    def save_grads(self, grad):
+        self.grads.append(grad)
+
+    def training_step(self, batch, batch_idx):
+        if not isinstance(batch[0], list):
+            batch = [batch for _ in range(self.num_bias_models)]
+        biased_loss = 0
+        unbiased_loss = 0
+        self.optimizer.zero_grad()
+        for i in range(self.num_bias_models):
+            x, y = batch[i][:2]
+            biased_y_hat = self.bias_councils[i](x)
+            biased_loss = self.gce(biased_y_hat, y[:, self.trainer.datamodule.NO_FINDING_INDEX, None]).mean() + biased_loss
+        biased_loss.backward(retain_graph=True)
+        for i in range(self.num_bias_models):
+            for j in range(i, self.num_bias_models):
+                biased_loss = biased_loss + \
+                    torch.abs(self.loss_ort(
+                        self.grads[i], self.grads[j])).mean()
+        self.grads = []
+        self.optimizer.zero_grad()
+        p_y_hat = None
+        x, y = batch[0][:2]
+        unbiased_y_hat = self.model(x)
+        # ensemble prediction
+        for i in range(self.num_bias_models):
+            biased_y_hat = self.bias_councils[i](x)
+            biased_y_hat = biased_y_hat.detach()
+            p_by = torch.sigmoid(biased_y_hat)
+            p_by = y[:, self.trainer.datamodule.NO_FINDING_INDEX, None] * p_by + (1 - y[:, self.trainer.datamodule.NO_FINDING_INDEX, None]) * (1 - p_by)
+            if p_y_hat is None:
+                p_y_hat = p_by
+            else:
+                p_y_hat = torch.max(p_y_hat, p_by)
+        w = torch.ones_like(y)
+        w[:, self.trainer.datamodule.NO_FINDING_INDEX] =  p_y_hat[:,0] * 13
+        unbiased_loss = unbiased_loss + (self.loss(unbiased_y_hat, y) * w).mean()
+        unbiased_loss = unbiased_loss + \
+            ((1 - p_y_hat) * self.loss(unbiased_y_hat[:, self.trainer.datamodule.NO_FINDING_INDEX, None], 1 - p_y_hat)).mean() * 13
+        loss = biased_loss * self.biased_loss_weight + unbiased_loss
         self.log_dict({'biased_loss': biased_loss,
                       'unbiased_loss': unbiased_loss, 'loss': loss})
         return loss

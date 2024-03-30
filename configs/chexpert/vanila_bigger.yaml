@@ -22,7 +22,7 @@ trainer:
   val_check_interval: null
   check_val_every_n_epoch: 1
   num_sanity_val_steps: null
-  log_every_n_steps: 5571
+  log_every_n_steps: 2786
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
@@ -42,7 +42,7 @@ trainer:
   default_root_dir: ./workdirs/
 pipeline: full
 exp_name: chexpert_vanila
-version: null
+version: vanila_bigger2
 checkpoint: null
 model:
   class_path: trainers.MIMICTrainer
@@ -51,10 +51,10 @@ model:
       class_path: models.MLP
       init_args:
         hidden_layer_sizes: [512, 256, 192, 192, 96, 96]
-        dropout: 0.4
+        dropout: 0.0
         norm: batch
         num_heads: 14
-    learning_rate: 0.0001253
+    learning_rate: 0.00024
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
@@ -62,5 +62,5 @@ data:
   class_path: datasets.CheXpertEmbeddingModule
   init_args:
     data_root: /local/ssd/huent/chexpert-embedding
-    batch_size: 32
+    batch_size: 64
     num_workers: 8

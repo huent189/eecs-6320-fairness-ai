@@ -22,7 +22,7 @@ trainer:
   val_check_interval: null
   check_val_every_n_epoch: 1
   num_sanity_val_steps: null
-  log_every_n_steps: 5571
+  log_every_n_steps: 3405
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
@@ -41,23 +41,32 @@ trainer:
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
 pipeline: full
-exp_name: chexpert_vanila
-version: null
+exp_name: chexpert_biasCouncils
+version: cxp_3BiasModel
 checkpoint: null
 model:
-  class_path: trainers.MIMICTrainer
+  class_path: trainers.OrthogonalBiasCouncilsTrainer
   init_args:
     model :
       class_path: models.MLP
       init_args:
-        hidden_layer_sizes: [512, 256, 192, 192, 96, 96]
+        hidden_layer_sizes: [512, 256, 192]
         dropout: 0.4
         norm: batch
         num_heads: 14
+    bias_model:
+      class_path: models.MLP
+      init_args:
+        hidden_layer_sizes: [512, 256, 192]
+        dropout: 0.4
+        num_heads: 14
+        norm: batch
+    num_bias_models: 3
     learning_rate: 0.0001253
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
+    biased_loss_weight: 5
 data:
   class_path: datasets.CheXpertEmbeddingModule
   init_args:

@@ -27,7 +27,7 @@ class MLP(nn.Module):
             hidden_layer_sizes[-1] if hidden_layer_sizes else embeddings_size, num_heads)
 
         self.init_weights()
-
+        self.hook_fn = None
     def init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Linear):
@@ -35,8 +35,11 @@ class MLP(nn.Module):
                     m.weight, mode='fan_in', nonlinearity='relu')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
-
+    def set_hook(self, hook_fn):
+        self.hook_fn = hook_fn
     def forward(self, x):
         x = self.features(x)
+        if self.hook_fn is not None:
+            x.register_hook(self.hook_fn)
         output = self.classifier(x)
         return output
