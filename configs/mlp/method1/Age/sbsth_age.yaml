@@ -41,12 +41,11 @@ trainer:
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
 pipeline: test
-exp_name: sbs_full
-version: base_pipe_th_model
-# checkpoint: './workdirs/sbs_full/AI-debias/znrggn2l/checkpoints/last.ckpt'
+exp_name: sbsth_age
+version: sbsth_age
 checkpoint: './workdirs/sbsth_full/AI-debias/urhjj8r2/checkpoints/last.ckpt'
 model:
-  class_path: trainers.MIMICTrainer
+  class_path: trainers.SBS_THR_Trainer
   init_args:
     model :
       class_path: models.MLP
@@ -59,9 +58,11 @@ model:
     end_lr_factor: 1.0
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
+    protected_attribute: age_decile
 data:
-  class_path: datasets.MIMICEmbeddingModule
+  class_path: datasets.PG_SBS_MIMICDataModule
   init_args:
     data_csv: /home/brouhani/Documents/courses/fairness/data/processed_mimic_df.csv
     batch_size: 32
     num_workers: 8
+    protected_attrb: age_decile

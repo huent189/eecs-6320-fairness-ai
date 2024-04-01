@@ -17,11 +17,14 @@ def get_overall_fnr(true_labels, predictions):
 def get_overall_fpr(true_labels, predictions):
     return ((true_labels != predictions) * (1 - true_labels)).float().mean().item()
 
-def fpr_optimality(true_labels, ys, lambda_factor, thresh):
+def fpr_optimality(true_labels, ys, lambda_factor, thresh, return_fpr=False):
     predictions = (ys > thresh).int()
     accuracy = get_overall_acc(true_labels, predictions)
-    fpr_val = fpr(true_labels, predictions, thresh)
-    return (1 - accuracy) + lambda_factor * fpr_val
+    fpr_val = fpr(ys, true_labels, thresh)
+    if not return_fpr:
+        return (1 - accuracy) + lambda_factor * fpr_val
+    else:
+        return (1 - accuracy) + lambda_factor * fpr_val, fpr_val
 
 
 def compute_optimal_threshold(preds, true_labels):
@@ -75,11 +78,14 @@ class OptimalThresholdSelector(nn.Module):
         self.y_trues.append(y_true)
 
 
-    def compute_optimal_threshold(self):
+    def get_optimal_threshold(self):
         y_preds = torch.concat(self.y_preds, dim=0)
         y_trues = torch.concat(self.y_trues, dim=0)
-        thres = compute_optimal_threshold(y_preds, y_trues)
-        return thres
+        best_f1_score, thres = compute_optimal_threshold(y_preds, y_trues)
+        print('--')
+        print(fpr(y_preds, y_trues, thres))
+        print(best_f1_score)
+        return best_f1_score, thres
 
 class GroupBasedStats(nn.Module):
     def __init__(self, num_groups):
@@ -133,25 +139,43 @@ class GroupBasedStatsVaryingThrs(nn.Module):
         self.y_preds = []
         self.y_trues = []
         self.group_attrbs = []
+        # This point to the attribute based on which we will determine the thresholds:
+        self.group_atttb_idx = None
         self.thres = {}
+        self.threhold_per_sample = None
 
     def forward(self, y_pred, y_true, group):
         self.y_preds.append(y_pred)
         self.y_trues.append(y_true)
         self.group_attrbs.append(group)
 
+    def set_group_attrb_idx(self, at_idx):
+        self.group_atttb_idx = at_idx
+
     def set_thres(self, th):
         self.thres = th
+        self.set_thrshold_per_sample()
+    
+    def set_thrshold_per_sample(self):
+        group_attrbs = torch.concat(self.group_attrbs, dim=0)
+        self.threhold_per_sample = []
+        for i in range(group_attrbs.shape[0]):
+        # for i in range(40):
+            value = self.thres[group_attrbs[i, self.group_atttb_idx].item()]
+            # self.threhold_per_sample[i] = torch.tensor(value, device='cuda:0', dtype=torch.float32)
+            self.threhold_per_sample.append(value)
+            # print(self.thres[group_attrbs[i, self.group_atttb_idx].item()])
+        self.threhold_per_sample = torch.tensor(self.threhold_per_sample, device='cuda:0', dtype=torch.float32)
 
     def get_acc_per_group_var_thrs(
         self, preds, true_labels, sensitive_attrs, thresholds, attr_idx
     ):
         accuracies = []
         for group in range(num_groups_per_attrb[attr_idx]):
-            idx = sensitive_attrs == group
-            group_preds = (preds[idx] > thresholds[group]).int()
-            group_true = true_labels[idx]
-            accuracies.append((group_preds == group_true).float().mean().item())
+            idx = sensitive_attrs[:, attr_idx] == group
+            group_preds = torch.gt(preds[idx, 0], self.threhold_per_sample[idx]).int()
+            group_true = true_labels[idx, 0]
+            accuracies.append(torch.eq(group_preds, group_true).float().mean().item())
         return accuracies
 
     def get_fpr_per_group_var_thrs(
@@ -159,10 +183,18 @@ class GroupBasedStatsVaryingThrs(nn.Module):
     ):
         fprs = []
         for group in range(num_groups_per_attrb[attr_idx]):
-            idx = (sensitive_attrs == group)
-            group_preds = preds[idx] 
-            group_true = true_labels[idx]
-            fprs.append(fpr(group_preds, group_true, thresholds[group]).item())
+            idx = sensitive_attrs[:, attr_idx] == group
+            # print('----')
+            group_preds = torch.gt(preds[idx, 0], self.threhold_per_sample[idx]).int()
+            # print(self.threhold_per_sample[idx][:10])
+            # print(group_preds[:10])
+            group_true = true_labels[idx, 0]
+            # print(group_true[:10])
+            # print(torch.ne(group_preds[:10], group_true[:10]).int())
+            # print(torch.ne(group_preds[:10], group_true[:10]).int() * group_preds[:10])
+            # print((torch.ne(group_preds, group_true).int() * group_preds).sum().item())
+            fpr = (torch.ne(group_preds, group_true).int() * group_preds).sum().item() / (group_true != 1).int().sum().item()            
+            fprs.append(fpr)
         return fprs
 
     def get_all_stats(self):        
@@ -199,20 +231,20 @@ class GroupBasedStatsVaryingThrs(nn.Module):
         )
         return accuracies, fprs
 
-    def compute_per_group_stats(self, attr):
-        accuracies, fprs = self.get_per_group_stats(attr)
-        acc_gap = max(accuracies) - min(accuracies)
-        fpr_gap = max(fprs) - min(fprs)
-        print(
-            "Accuracy gap for attribute {attr}: {acc_gap}\n".format(
-                attr=index_to_protected_group[attr], acc_gap=acc_gap
-            )
-        )
-        print(
-            "FPR gap for attribute {attr}: {fpr_gap}\n".format(
-                attr=index_to_protected_group[attr], fpr_gap=fpr_gap
-            )
-        )
+    # def compute_per_group_stats(self, attr):
+    #     accuracies, fprs = self.get_per_group_stats(attr)
+    #     acc_gap = max(accuracies) - min(accuracies)
+    #     fpr_gap = max(fprs) - min(fprs)
+    #     print(
+    #         "Accuracy gap for attribute {attr}: {acc_gap}\n".format(
+    #             attr=index_to_protected_group[attr], acc_gap=acc_gap
+    #         )
+    #     )
+    #     print(
+    #         "FPR gap for attribute {attr}: {fpr_gap}\n".format(
+    #             attr=index_to_protected_group[attr], fpr_gap=fpr_gap
+    #         )
+    #     )
 
 
 class OptimalThresholdPerGroup(nn.Module):
@@ -234,18 +266,20 @@ class OptimalThresholdPerGroup(nn.Module):
         thresholds = np.linspace(0.01, 0.99, num=100)
         best_loss = 9e10
         best_threshold = None
+        best_fpr = None
         for thresh in thresholds:
             # Convert predictions to binary using threshold
             # binary_preds = (y_preds > thresh).int()
-            loss = fpr_optimality(y_trues.cpu(), y_preds.cpu(), self.lambda_factor, thresh)
+            loss, fpr = fpr_optimality(y_trues.cpu(), y_preds.cpu(), self.lambda_factor, thresh, return_fpr=True)
             if loss < best_loss:
                 best_loss = loss
                 best_threshold = thresh
-                print(best_threshold)
+                best_fpr = fpr
         assert best_threshold is not None, 'assertion error, no best threshold was found, change the initial value of the best loss.'
+        print(best_fpr)
         return best_threshold
 
-    def compute_optimal_thresholds(self):
+    def get_optimal_thresholds(self):
         thres = {}
         for group in self.y_preds.keys():
             y_preds = torch.concat(self.y_preds[group], dim=0)

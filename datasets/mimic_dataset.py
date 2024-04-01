@@ -36,14 +36,34 @@ else:
 device = torch.device(device)
 
 
-gender_labels = ['M', 'F']
-age_labels = ['0-20', '20-40', '40-60', '60-80', '80+']
-race_labels = ['WHITE', 'BLACK/AFRICAN AMERICAN', 'ASIAN',
-               'HISPANIC/LATINO', 'AMERICAN INDIAN/ALASKA NATIVE', 'OTHER']
+gender_labels = ["M", "F"]
+age_labels = ["0-20", "20-40", "40-60", "60-80", "80+"]
+race_labels = [
+    "WHITE",
+    "BLACK/AFRICAN AMERICAN",
+    "ASIAN",
+    "HISPANIC/LATINO",
+    "AMERICAN INDIAN/ALASKA NATIVE",
+    "OTHER",
+]
 group_labels = [gender_labels, age_labels, race_labels]
-ATTRB_LABELS = ['Gender', 'Age', 'Race']
-disease_labels = ['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Enlarged_Cardiomediastinum', 'Fracture',
-                  'Lung_Lesion', 'Lung_Opacity', 'No_Finding', 'Pleural_Effusion', 'Pleural_Other', 'Pneumonia', 'Pneumothorax', 'Support_Devices']
+ATTRB_LABELS = ["Gender", "Age", "Race"]
+disease_labels = [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Consolidation",
+    "Edema",
+    "Enlarged_Cardiomediastinum",
+    "Fracture",
+    "Lung_Lesion",
+    "Lung_Opacity",
+    "No_Finding",
+    "Pleural_Effusion",
+    "Pleural_Other",
+    "Pneumonia",
+    "Pneumothorax",
+    "Support_Devices",
+]
 NO_FINDING_INDEX = 8
 
 
@@ -51,10 +71,11 @@ class MIMICEmbeddingDataset(Dataset):
     def __init__(self, data_path, split, subset_ratio=1.0):
         # Load your dataset
         self.data = pd.read_csv(data_path)
-        self.data = self.data[self.data['split'] == split]
+        self.data = self.data[self.data["split"] == split]
         if subset_ratio != 1.0:
             self.data = self.data.sample(
-                frac=subset_ratio, random_state=1, replace=False)
+                frac=subset_ratio, random_state=1, replace=False
+            )
 
     def __len__(self):
         return len(self.data)
@@ -70,7 +91,7 @@ class MIMICEmbeddingDataset(Dataset):
         )
         # If the processed data has been made by the tfrecode data, fix the path to use np instead:
         sample_path = sample["path"]
-        if '.tf' in sample_path:
+        if ".tf" in sample_path:
             emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
         else:
             emb = np.load(sample["path"], allow_pickle=True)
@@ -80,7 +101,6 @@ class MIMICEmbeddingDataset(Dataset):
             torch.from_numpy(label).float(),
             torch.from_numpy(demographic_data).long(),
         )
-
 
 
 class MIMICEmbeddingModule(LightningDataModule):
@@ -114,13 +134,13 @@ class MIMICEmbeddingModule(LightningDataModule):
     def test_dataloader(self):
         return [
             DataLoader(
-                self.val_set,
+                self.test_set,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 pin_memory=True,
             ),
             DataLoader(
-                self.test_set,
+                self.val_set,
                 batch_size=self.batch_size,
                 num_workers=self.num_workers,
                 pin_memory=True,
@@ -179,7 +199,24 @@ class SBSMIMICEmbeddingModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
         )
-        return test_loader
+        data_loader = DataLoader(
+            self.val_set,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
+        sampler = WeightedRandomSampler(weights, len(weights))
+        val_loader = DataLoader(
+            self.val_set,
+            batch_size=self.batch_size,
+            shuffle=False,
+            sampler=sampler,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        return [test_loader, val_loader]
 
     def val_dataloader(self):
         data_loader = DataLoader(
@@ -360,7 +397,7 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
             DataLoader(
                 test_set,
                 batch_size=self.batch_size,
-                shuffle=True,
+                shuffle=False,
                 num_workers=self.num_workers,
                 pin_memory=True,
             )
@@ -376,8 +413,14 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
         )
-        weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        weights, largest_group, n_groups = self.make_weights_for_balanced_classes(
+            self.data_csv, data_loader, return_groups_info=True
+        )
+        # sampler = WeightedRandomSampler(weights, len(weights))
+        # This let's us get more data of under-represented groups without skipping data from well represented groups
+        # as opposed to using the origin dataset length which will lead to losing some of the previledged group samples
+        len_dataset = n_groups * largest_group
+        sampler = WeightedRandomSampler(weights, len_dataset)
         val_loader = DataLoader(
             self.val_set,
             batch_size=self.batch_size,
@@ -388,7 +431,9 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
         )
         return val_loader
 
-    def make_weights_for_balanced_classes(self, data_csv, data_loader):
+    def make_weights_for_balanced_classes(
+        self, data_csv, data_loader, return_groups_info=False
+    ):
         data = pd.read_csv(data_csv)
         protected_group_weights = {}
         protected_group_name_2_map = {
@@ -398,8 +443,12 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
         }
         sum_weights = 0
         protected_group_map = protected_group_name_2_map[self.protected_attrb]
+        largest_group_num = 0
+        groups = len(protected_group_map.keys())
         for k in protected_group_map.keys():
             num_group = data[data[self.protected_attrb] == k].shape[0]
+            if num_group > largest_group_num:
+                largest_group_num = num_group
             weight_group = 1.0 / (num_group + 0.01)
             protected_group_weights[protected_group_map[k]] = weight_group
             sum_weights += weight_group
@@ -417,6 +466,8 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
                 weight[idx] = protected_group_weights[
                     demographic_data[j, protected_group_idx].item()
                 ]
+        if return_groups_info:
+            return weight, largest_group_num, groups
         return weight
 
 
@@ -481,12 +532,23 @@ class SBS_MIMICDataModule(LightningDataModule):
             pin_memory=True,
         )
         val_loaders = DataLoader(
-                self.test_sets[1],
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_workers,
-                pin_memory=True,
-            )
+            self.test_sets[1],
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+        weights = self.make_weights_for_balanced_classes(self.data_csv, val_loaders)
+        sampler = WeightedRandomSampler(weights, len(weights))
+        val_loaders = DataLoader(
+            self.test_sets[1],
+            batch_size=self.batch_size,
+            shuffle=False,
+            sampler=sampler,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+
         return [test_loader, val_loaders]
 
     def val_dataloader(self):
@@ -569,7 +631,7 @@ class MIMICProtectedGroupDataset(Dataset):
         )
         sample_path = sample["path"]
         # If the processed data has been made by the tfrecode data, fix the path to use np instead:
-        if '.tf' in sample_path:
+        if ".tf" in sample_path:
             emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
         else:
             emb = np.load(sample["path"], allow_pickle=True)
@@ -581,30 +643,42 @@ class MIMICProtectedGroupDataset(Dataset):
             torch.from_numpy(demographic_data).long(),
         )
 
+
 class MultipleMiMicEmbeddingDataModule(MIMICEmbeddingModule):
     def __init__(self, data_csv, batch_size, num_workers, trainset_ratios):
         super().__init__(data_csv, batch_size, num_workers)
         self.trainset_ratios = trainset_ratios
 
     def setup(self, stage: str):
-        self.test_set = MIMICEmbeddingDataset(self.data_csv, split='test')
-        self.train_sets = [MIMICEmbeddingDataset(
-            self.data_csv, split='train', subset_ratio=r) for r in self.trainset_ratios]
-        self.val_set = MIMICEmbeddingDataset(self.data_csv, split='validate')
+        self.test_set = MIMICEmbeddingDataset(self.data_csv, split="test")
+        self.train_sets = [
+            MIMICEmbeddingDataset(self.data_csv, split="train", subset_ratio=r)
+            for r in self.trainset_ratios
+        ]
+        self.val_set = MIMICEmbeddingDataset(self.data_csv, split="validate")
 
     def train_dataloader(self):
-        return [DataLoader(ts, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True) for ts in self.train_sets]
+        return [
+            DataLoader(
+                ts,
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                pin_memory=True,
+            )
+            for ts in self.train_sets
+        ]
 
 
 class TinyMIMICEmbeddingDataset(Dataset):
     def __init__(self, data_path, split, subset_ratio=1.0):
         # Load your dataset
         self.data = pd.read_csv(data_path)
-        self.data = self.data[self.data['split'] == split]
+        self.data = self.data[self.data["split"] == split]
         self.data = self.data[:15]
         if subset_ratio != 1.0:
             self.data = self.data.sample(
-                frac=subset_ratio, random_state=1, replace=False)
+                frac=subset_ratio, random_state=1, replace=False
+            )
 
     def __len__(self):
         return 15
@@ -620,7 +694,7 @@ class TinyMIMICEmbeddingDataset(Dataset):
         )
         # If the processed data has been made by the tfrecode data, fix the path to use np instead:
         sample_path = sample["path"]
-        if '.tf' in sample_path:
+        if ".tf" in sample_path:
             emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
         else:
             emb = np.load(sample["path"], allow_pickle=True)
@@ -630,7 +704,7 @@ class TinyMIMICEmbeddingDataset(Dataset):
             torch.from_numpy(label).float(),
             torch.from_numpy(demographic_data).long(),
         )
-    
+
 
 class TinyPG_SBS_MIMICDataModule(LightningDataModule):
     """
@@ -760,7 +834,6 @@ class TinyPG_SBS_MIMICDataModule(LightningDataModule):
                     demographic_data[j, protected_group_idx].item()
                 ]
         return weight
-    
 
 
 class TinyMIMICProtectedGroupDataset(Dataset):
@@ -792,7 +865,7 @@ class TinyMIMICProtectedGroupDataset(Dataset):
         )
         sample_path = sample["path"]
         # If the processed data has been made by the tfrecode data, fix the path to use np instead:
-        if '.tf' in sample_path:
+        if ".tf" in sample_path:
             emb = np.load(sample["path"].split(".tf")[0] + ".npy", allow_pickle=True)
         else:
             emb = np.load(sample["path"], allow_pickle=True)

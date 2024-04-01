@@ -41,11 +41,14 @@ trainer:
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
 pipeline: test
-exp_name: sbsth_full
-version: sbsth_test_loss
-checkpoint: './workdirs/sbsth_full/AI-debias/urhjj8r2/checkpoints/last.ckpt'
+exp_name: baseline
+version: BS_race_balanced_data
+# model trained without sbs:
+checkpoint: './workdirs/baseline/AI-debias/2f4gc8sj/checkpoints/last.ckpt'
+# model trained with sbs:
+# checkpoint: './workdirs/sbsth_full/AI-debias/urhjj8r2/checkpoints/last.ckpt'
 model:
-  class_path: trainers.SBS_THR_Trainer
+  class_path: trainers.MIMICTrainer
   init_args:
     model :
       class_path: models.MLP
@@ -59,9 +62,9 @@ model:
     weight_decay: 1.1342834436836775e-05
     decay_steps: 1000
 data:
-  class_path: datasets.PG_SBS_MIMICDataModule
+  class_path: datasets.SBS_MIMICDataModule
   init_args:
     data_csv: /home/brouhani/Documents/courses/fairness/data/processed_mimic_df.csv
     batch_size: 32
     num_workers: 8
-    protected_attrb: gender
+    protected_attrb: race

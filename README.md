@@ -46,3 +46,10 @@ python main.py --config configs/mlp/vanila.yaml
      - AUC on average of all classes and on No finding
 - If we have more time:
     - [ ] Ambiguity (?)
+
+- Logging stuff needed:
+ - [x] Exact thresholds found for each group 
+ - [x] Full FPR metrics 
+ - [ ] FDR rate
+ - [x] Log accucary for baseline and SBS
+ - [x] Log everything in the threshold scenario

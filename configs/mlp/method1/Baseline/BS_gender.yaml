@@ -40,12 +40,15 @@ trainer:
   sync_batchnorm: false
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: ./workdirs/
-pipeline: full
-exp_name: sbs_full
-version: v1
-# checkpoint: './workdirs/full_test/AI-debias/9ueihh1r/checkpoints/last.ckpt'
+pipeline: test
+exp_name: baseline
+version: BS_gender_balanced_data
+# model trained without sbs:
+checkpoint: './workdirs/baseline/AI-debias/2f4gc8sj/checkpoints/last.ckpt'
+# model trained with sbs:
+# checkpoint: './workdirs/sbsth_full/AI-debias/urhjj8r2/checkpoints/last.ckpt'
 model:
-  class_path: trainers.SBS_MIMICTrainer
+  class_path: trainers.MIMICTrainer
   init_args:
     model :
       class_path: models.MLP
