@@ -101,23 +101,24 @@ class MIMICTrainer(LightningModule):
         table_data = []
         metric_names = group_metrics[0][0].keys()
 
-        for i, group in enumerate(group_metrics):
-            attb = ATTRB_LABELS[i]
-            for m in metric_names:
-                tab = wandb.Table(columns=["Label", m])
-                for j in range(len(group)):
-                    sub_group_label = group_labels[i][j]
-                    tab.add_data(sub_group_label, group_metrics[i][j][m])
-                self.logger.experiment.log(
-                    {f'test/{attb}_{m}': wandb.plot.bar(tab, 'Label', m, title=f'{m} for {attb}')})
-        tab = wandb.Table(columns=["Label"] + list(metric_names))
+        # for i, group in enumerate(group_metrics):
+        #     attb = ATTRB_LABELS[i]
+        #     for m in metric_names:
+        #         tab = wandb.Table(columns=["Label", m])
+        #         for j in range(len(group)):
+        #             sub_group_label = group_labels[i][j]
+        #             tab.add_data(sub_group_label, group_metrics[i][j][m])
+        #         fig = wandb.plot.bar(tab, 'Label', m, title=f'{m} for {attb}')
+        #         self.logger.experiment.log(
+        #             {f'test/{attb}_{m}': fig})
+        new_tab = wandb.Table(columns=["Label"] + list(metric_names))
         for i, group in enumerate(group_metrics):
             attb = ATTRB_LABELS[i]
             for j in range(len(group)):
                 sub_group_label = group_labels[i][j]
-                tab.add_data(sub_group_label, *[group[i][k] for k in metric_names])
+                new_tab.add_data(sub_group_label, *[group[j][k] for k in metric_names])
         self.logger.experiment.log(
-            {"test/summary": tab})
+            {"test/summary": new_tab})
 
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.model.parameters(
@@ -242,9 +243,9 @@ class OrthogonalBiasCouncilsTrainer(BiasCouncilTrainer):
             for j in range(i, self.num_bias_models):
                 biased_loss = biased_loss + \
                     torch.abs(self.loss_ort(
-                        self.grads[i], self.grads[j])).mean()
+                        self.grads[i].detach(), self.grads[j])).mean()
         self.grads = []
-        self.optimizer.zero_grad()
+        # self.optimizer.zero_grad()
         p_y_hat = None
         x, y = batch[0][:2]
         unbiased_y_hat = self.model(x)
@@ -257,12 +258,12 @@ class OrthogonalBiasCouncilsTrainer(BiasCouncilTrainer):
             if p_y_hat is None:
                 p_y_hat = p_by
             else:
-                p_y_hat = torch.max(p_y_hat, p_by)
+                p_y_hat = torch.min(p_y_hat, p_by)
         w = torch.ones_like(y)
-        w[:, self.trainer.datamodule.NO_FINDING_INDEX] =  p_y_hat[:,0] * 13
+        w[:, self.trainer.datamodule.NO_FINDING_INDEX] =  p_y_hat[:,0]
         unbiased_loss = unbiased_loss + (self.loss(unbiased_y_hat, y) * w).mean()
         unbiased_loss = unbiased_loss + \
-            ((1 - p_y_hat) * self.loss(unbiased_y_hat[:, self.trainer.datamodule.NO_FINDING_INDEX, None], 1 - p_y_hat)).mean() * 13
+            ((1 - p_y_hat) * self.loss(unbiased_y_hat[:, self.trainer.datamodule.NO_FINDING_INDEX, None], 1 - p_y_hat)).mean()
         loss = biased_loss * self.biased_loss_weight + unbiased_loss
         self.log_dict({'biased_loss': biased_loss,
                       'unbiased_loss': unbiased_loss, 'loss': loss})
