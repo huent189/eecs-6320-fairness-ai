@@ -122,58 +122,46 @@ class MIMICTrainer(LightningModule):
             }
         )
 
-        best_f1_score, th = self.optimal_thres_selector.get_optimal_threshold()
-        self.logger.experiment.log(
-            {"test/optimal_threshold": th, "test/f1_score": best_f1_score}
-        )
+        _, th = self.optimal_thres_selector.get_optimal_threshold()
+        threshold_log = {}
+        threshold_log["test/optimal_threshold"] = th
+        self.logger.experiment.log(threshold_log)
 
         self.group_metrics.set_thres(th)
-        group_fprs = self.group_metrics.computer_per_group_fpr()
-        group_accs, _ = self.group_metrics.computer_per_group_acc()
-        # First column is attb, second column is fpr, third column is fpr_gap
-        table_data = []
-        for i, (group_fpr, group_acc) in enumerate(zip(group_fprs, group_accs)):
-            mu_fpr = sum(group_fpr) / len(group_fpr)
-            mu_acc = sum(group_acc) / len(group_acc)
-            fpr_plot_per_attb = []
-            acc_plot_per_attb = []
-            attb = ATTRB_LABELS[i]
-            for j, (fpr, acc) in enumerate(zip(group_fpr, group_acc)):
-                sub_group_label = group_labels[i][j]
-                table_data.append(
-                    [sub_group_label, fpr, fpr - mu_fpr, acc, acc - mu_acc]
-                )
-                fpr_plot_per_attb.append([sub_group_label, fpr])
-                acc_plot_per_attb.append([sub_group_label, acc])
-            table_data.append(
-                [f"Average fpr of {attb} attribute", mu_fpr, -1, mu_acc, -1]
-            )
-            fpr_per_attb_table = wandb.Table(
-                data=fpr_plot_per_attb, columns=["Label", "FPR"]
-            )
-            acc_per_attb_table = wandb.Table(
-                data=acc_plot_per_attb, columns=["Label", "ACC"]
-            )
-            self.logger.experiment.log(
-                {
-                    f"test/{attb}": wandb.plot.bar(
-                        fpr_per_attb_table, "Label", "FPR", title=f"FPR for {attb}"
-                    )
-                }
-            )
-            self.logger.experiment.log(
-                {
-                    f"test/{attb}": wandb.plot.bar(
-                        acc_per_attb_table, "Label", "ACC", title=f"ACC for {attb}"
-                    )
-                }
-            )
 
+        def get_metric_mu(group_metric):
+            return sum(group_metric) / len(group_metric)
+        def log_metric(metric, plot_per_attb):
+            data_table = wandb.Table(
+                data=plot_per_attb, columns=["Label", metric]
+            )
+            self.logger.experiment.log(
+                {
+                    f"test/{attb}/{metric}": wandb.plot.bar(
+                        data_table, "Label", metric, title=f"{metric} for {attb}"
+                    )
+                }
+            )
+        metrics = self.group_metrics.get_all_stats()
+        table_data = []
+        for protected_attb_idx in range(len(num_groups_per_attrb)):            
+            attb = ATTRB_LABELS[protected_attb_idx]
+            table_data.append(
+                [f"Average & Gaps of {attb}", ] + [x for key in metrics.keys() for x in [get_metric_mu(metrics[key][0][protected_attb_idx]), metrics[key][1][protected_attb_idx]]]
+            )
+            metric_plot_per_attb = {key:[] for key in metrics.keys()}
+            for j in range(num_groups_per_attrb[protected_attb_idx]):
+                sub_group_label = group_labels[protected_attb_idx][j]
+                table_data.append([sub_group_label] + [x for key in metrics.keys() for x in [metrics[key][0][protected_attb_idx][j], metrics[key][0][protected_attb_idx][j] - get_metric_mu(metrics[key][0][protected_attb_idx])]])
+                for key in metrics.keys():
+                    metric = metrics[key][0][protected_attb_idx][j]
+                    metric_plot_per_attb[key].append([sub_group_label, metric])
+                    log_metric(key, metric_plot_per_attb[key])
         self.logger.experiment.log(
             {
                 "test/fpr_summary": wandb.Table(
                     data=table_data,
-                    columns=["Attribute", "fpr", "fpr_gap", "acc", "acc_gap"],
+                    columns=["Attribute"] + [x for key in metrics.keys() for x in [key, "{}_gap".format(key)]],
                 )
             }
         )
@@ -433,53 +421,47 @@ class SBS_THR_Trainer(LightningModule):
 
         self.group_stats.set_thres(ths)
         # self.group_stats.compute_per_group_stats(self.protected_attribute_idx)
-        for protected_attb_idx in range(len(num_groups_per_attrb)):            
-            group_acc, group_fpr = self.group_stats.get_per_group_stats(
-                protected_attb_idx
+        def get_metric_mu(group_metric):
+            return sum(group_metric) / len(group_metric)
+        def log_metric(metric, plot_per_attb):
+            data_table = wandb.Table(
+                data=plot_per_attb, columns=["Label", metric]
             )
-            table_data = []
+            self.logger.experiment.log(
+                {
+                    f"test/{attb}/{metric}": wandb.plot.bar(
+                        data_table, "Label", metric, title=f"{metric} for {attb}"
+                    )
+                }
+            )
+
+
+
+        metrics = self.group_stats.get_all_stats()
+        table_data = []
+        for protected_attb_idx in range(len(num_groups_per_attrb)):            
             # First column is attb, second column is fpr, third column is fpr_gap
             # 4: accuracy, 5: accuracy gap
-            attb = ATTRB_LABELS[protected_attb_idx]
-
-            mu_fpr = sum(group_fpr) / len(group_fpr)
-            mu_acc = sum(group_acc) / len(group_acc)
-            fpr_plot_per_attb = []
-            acc_plot_per_attb = []
-            for j, (fpr, acc) in enumerate(zip(group_fpr, group_acc)):
+            attb = ATTRB_LABELS[protected_attb_idx]            
+            # mu_fpr = sum(group_fpr) / len(group_fpr)
+            # mu_acc = sum(group_acc) / len(group_acc)
+            table_data.append(
+                [f"Average & Gaps of {attb}", ] + [x for key in metrics.keys() for x in [get_metric_mu(metrics[key][0][protected_attb_idx]), metrics[key][1][protected_attb_idx]]]
+            )
+            # fpr_plot_per_attb = []
+            metric_plot_per_attb = {key:[] for key in metrics.keys()}
+            for j in range(num_groups_per_attrb[protected_attb_idx]):
                 sub_group_label = group_labels[protected_attb_idx][j]
-                table_data.append([sub_group_label, fpr, fpr - mu_fpr, acc, acc - mu_acc])
-                fpr_plot_per_attb.append([sub_group_label, fpr])
-                acc_plot_per_attb.append([sub_group_label, acc])
-                table_data.append(
-                    [f"Average fpr & acc of {attb} attribute", mu_fpr, -1, mu_acc, -1]
-                )
-                fpr_per_attb_table = wandb.Table(
-                    data=fpr_plot_per_attb, columns=["Label", "FPR"]
-                )
-                acc_per_attb_table = wandb.Table(
-                    data=acc_plot_per_attb, columns=["Label", "ACC"]
-                )
-                self.logger.experiment.log(
-                    {
-                        f"test/{attb}/fpr": wandb.plot.bar(
-                            fpr_per_attb_table, "Label", "FPR", title=f"FPR for {attb}"
-                        )
-                    }
-                )
-                print(fpr_plot_per_attb)
-                self.logger.experiment.log(
-                    {
-                        f"test/{attb}/acc": wandb.plot.bar(
-                            acc_per_attb_table, "Label", "ACC", title=f"ACC for {attb}"
-                        )
-                    }
-                )
+                table_data.append([sub_group_label] + [x for key in metrics.keys() for x in [metrics[key][0][protected_attb_idx][j], metrics[key][0][protected_attb_idx][j] - get_metric_mu(metrics[key][0][protected_attb_idx])]])
+                for key in metrics.keys():
+                    metric = metrics[key][0][protected_attb_idx][j]
+                    metric_plot_per_attb[key].append([sub_group_label, metric])
+                    log_metric(key, metric_plot_per_attb[key])
         self.logger.experiment.log(
             {
                 "test/fpr_summary": wandb.Table(
                     data=table_data,
-                    columns=["Attribute", "fpr", "fpr_gap", "acc", "acc_gap"],
+                    columns=["Attribute"] + [x for key in metrics.keys() for x in [key, "{}_gap".format(key)]],
                 )
             }
         )
@@ -611,55 +593,44 @@ class SBS_MIMICTrainer(LightningModule):
         self.logger.experiment.log(threshold_log)
 
         self.group_metrics.set_thres(th)
-        group_fprs = self.group_metrics.computer_per_group_fpr()
-        group_accs, _ = self.group_metrics.computer_per_group_acc()
-        # First column is attb, second column is fpr, third column is fpr_gap
-        table_data = []
-        for i, (group_fpr, group_acc) in enumerate(zip(group_fprs, group_accs)):
-            mu_fpr = sum(group_fpr) / len(group_fpr)
-            mu_acc = sum(group_acc) / len(group_acc)
-            fpr_plot_per_attb = []
-            acc_plot_per_attb = []
-            attb = ATTRB_LABELS[i]
-            for j, (fpr, acc) in enumerate(zip(group_fpr, group_acc)):
-                sub_group_label = group_labels[i][j]
-                table_data.append(
-                    [sub_group_label, fpr, fpr - mu_fpr, acc, acc - mu_acc]
-                )
-                fpr_plot_per_attb.append([sub_group_label, fpr])
-                acc_plot_per_attb.append([sub_group_label, acc])
-            table_data.append(
-                [f"Average fpr of {attb} attribute", mu_fpr, -1, mu_acc, -1]
-            )
-            fpr_per_attb_table = wandb.Table(
-                data=fpr_plot_per_attb, columns=["Label", "FPR"]
-            )
-            acc_per_attb_table = wandb.Table(
-                data=acc_plot_per_attb, columns=["Label", "ACC"]
-            )
-            self.logger.experiment.log(
-                {
-                    f"test/{attb}": wandb.plot.bar(
-                        fpr_per_attb_table, "Label", "FPR", title=f"FPR for {attb}"
-                    )
-                }
-            )
-            self.logger.experiment.log(
-                {
-                    f"test/{attb}": wandb.plot.bar(
-                        acc_per_attb_table, "Label", "ACC", title=f"ACC for {attb}"
-                    )
-                }
-            )
 
+        def get_metric_mu(group_metric):
+            return sum(group_metric) / len(group_metric)
+        def log_metric(metric, plot_per_attb):
+            data_table = wandb.Table(
+                data=plot_per_attb, columns=["Label", metric]
+            )
+            self.logger.experiment.log(
+                {
+                    f"test/{attb}/{metric}": wandb.plot.bar(
+                        data_table, "Label", metric, title=f"{metric} for {attb}"
+                    )
+                }
+            )
+        metrics = self.group_metrics.get_all_stats()
+        table_data = []
+        for protected_attb_idx in range(len(num_groups_per_attrb)):            
+            attb = ATTRB_LABELS[protected_attb_idx]
+            table_data.append(
+                [f"Average & Gaps of {attb}", ] + [x for key in metrics.keys() for x in [get_metric_mu(metrics[key][0][protected_attb_idx]), metrics[key][1][protected_attb_idx]]]
+            )
+            metric_plot_per_attb = {key:[] for key in metrics.keys()}
+            for j in range(num_groups_per_attrb[protected_attb_idx]):
+                sub_group_label = group_labels[protected_attb_idx][j]
+                table_data.append([sub_group_label] + [x for key in metrics.keys() for x in [metrics[key][0][protected_attb_idx][j], metrics[key][0][protected_attb_idx][j] - get_metric_mu(metrics[key][0][protected_attb_idx])]])
+                for key in metrics.keys():
+                    metric = metrics[key][0][protected_attb_idx][j]
+                    metric_plot_per_attb[key].append([sub_group_label, metric])
+                    log_metric(key, metric_plot_per_attb[key])
         self.logger.experiment.log(
             {
                 "test/fpr_summary": wandb.Table(
                     data=table_data,
-                    columns=["Attribute", "fpr", "fpr_gap", "acc", "acc_gap"],
+                    columns=["Attribute"] + [x for key in metrics.keys() for x in [key, "{}_gap".format(key)]],
                 )
             }
         )
+
 
     def configure_optimizers(self):
         optimizer = torch_optimizer.Lamb(
