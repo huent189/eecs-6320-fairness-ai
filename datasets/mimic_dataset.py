@@ -190,7 +190,7 @@ class SBSMIMICEmbeddingModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         test_loader = DataLoader(
             self.test_set,
             batch_size=self.batch_size,
@@ -207,7 +207,7 @@ class SBSMIMICEmbeddingModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         val_loader = DataLoader(
             self.val_set,
             batch_size=self.batch_size,
@@ -227,7 +227,7 @@ class SBSMIMICEmbeddingModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         val_loader = DataLoader(
             self.val_set,
             batch_size=self.batch_size,
@@ -253,15 +253,17 @@ class SBSMIMICEmbeddingModule(LightningDataModule):
         for k in protected_group_map.keys():
             protected_group_weights[protected_group_map[k]] /= sum_weights
 
-        weight = torch.zeros(data.shape[0]).to(device)
+        # weight = torch.zeros(data.shape[0]).to(device)
+        weight = []
         protected_group_idx = protected_group_to_index[self.protected_attrb]
         for i, (emb, _, demographic_data) in enumerate(data_loader):
             idxs = torch.arange(0, emb.shape[0]) + (i * self.batch_size)
             idxs = idxs.to(dtype=torch.long, device=device)
             for j, idx in enumerate(idxs):
-                weight[idx] = protected_group_weights[
+                weight.append(protected_group_weights[
                     demographic_data[j, protected_group_idx].item()
-                ]
+                ])
+        weight = torch.tensor(weight)
         return weight
 
 
@@ -384,7 +386,7 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         test_loader = DataLoader(
             self.test_sets[0],
             batch_size=self.batch_size,
@@ -416,7 +418,7 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
         weights, largest_group, n_groups = self.make_weights_for_balanced_classes(
             self.data_csv, data_loader, return_groups_info=True
         )
-        # sampler = WeightedRandomSampler(weights, len(weights))
+        # sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         # This let's us get more data of under-represented groups without skipping data from well represented groups
         # as opposed to using the origin dataset length which will lead to losing some of the previledged group samples
         len_dataset = n_groups * largest_group
@@ -457,15 +459,17 @@ class PG_SBS_MIMICDataModule(LightningDataModule):
         for k in protected_group_map.keys():
             protected_group_weights[protected_group_map[k]] /= sum_weights
 
-        weight = torch.zeros(data.shape[0]).to(device)
+        # weight = torch.zeros(data.shape[0]).to(device)
+        weight = []
         protected_group_idx = protected_group_to_index[self.protected_attrb]
         for i, (emb, _, demographic_data) in enumerate(data_loader):
             idxs = torch.arange(0, emb.shape[0]) + (i * self.batch_size)
             idxs = idxs.to(dtype=torch.long, device=device)
             for j, idx in enumerate(idxs):
-                weight[idx] = protected_group_weights[
+                weight.append(protected_group_weights[
                     demographic_data[j, protected_group_idx].item()
-                ]
+                ])
+        weight = torch.tensor(weight)
         if return_groups_info:
             return weight, largest_group_num, groups
         return weight
@@ -522,7 +526,7 @@ class SBS_MIMICDataModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         test_loader = DataLoader(
             self.test_sets[0],
             batch_size=self.batch_size,
@@ -539,7 +543,7 @@ class SBS_MIMICDataModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, val_loaders)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         val_loaders = DataLoader(
             self.test_sets[1],
             batch_size=self.batch_size,
@@ -560,7 +564,7 @@ class SBS_MIMICDataModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         val_loader = DataLoader(
             self.val_set,
             batch_size=self.batch_size,
@@ -591,15 +595,17 @@ class SBS_MIMICDataModule(LightningDataModule):
         for k in protected_group_map.keys():
             protected_group_weights[protected_group_map[k]] /= sum_weights
 
-        weight = torch.zeros(data.shape[0]).to(device)
+        # weight = torch.zeros(data.shape[0]).to(device)
+        weight = []
         protected_group_idx = protected_group_to_index[self.protected_attrb]
         for i, (emb, _, demographic_data) in enumerate(data_loader):
             idxs = torch.arange(0, emb.shape[0]) + (i * self.batch_size)
             idxs = idxs.to(dtype=torch.long, device=device)
             for j, idx in enumerate(idxs):
-                weight[idx] = protected_group_weights[
+                weight.append(protected_group_weights[
                     demographic_data[j, protected_group_idx].item()
-                ]
+                ])
+        weight = torch.tensor(weight)
         return weight
 
 
@@ -763,7 +769,7 @@ class TinyPG_SBS_MIMICDataModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         test_loader = DataLoader(
             self.test_sets[0],
             batch_size=self.batch_size,
@@ -793,7 +799,7 @@ class TinyPG_SBS_MIMICDataModule(LightningDataModule):
             pin_memory=True,
         )
         weights = self.make_weights_for_balanced_classes(self.data_csv, data_loader)
-        sampler = WeightedRandomSampler(weights, len(weights))
+        sampler = WeightedRandomSampler(weights, len(weights), replacement=False)
         val_loader = DataLoader(
             self.val_set,
             batch_size=self.batch_size,
@@ -824,15 +830,17 @@ class TinyPG_SBS_MIMICDataModule(LightningDataModule):
         for k in protected_group_map.keys():
             protected_group_weights[protected_group_map[k]] /= sum_weights
 
-        weight = torch.zeros(data.shape[0]).to(device)
+        # weight = torch.zeros(data.shape[0]).to(device)
+        weight = []
         protected_group_idx = protected_group_to_index[self.protected_attrb]
         for i, (emb, _, demographic_data) in enumerate(data_loader):
             idxs = torch.arange(0, emb.shape[0]) + (i * self.batch_size)
             idxs = idxs.to(dtype=torch.long, device=device)
             for j, idx in enumerate(idxs):
-                weight[idx] = protected_group_weights[
+                weight.append(protected_group_weights[
                     demographic_data[j, protected_group_idx].item()
-                ]
+                ])
+        weight = torch.tensor(weight)
         return weight
 
 
