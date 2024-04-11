@@ -4,5 +4,5 @@
 # How to train the model:
 
 ```
-python main.py --config configs/mlp/vanila.yaml
+python main.py --config [path to one of the .yaml files in the configs/ folder]
 ```
